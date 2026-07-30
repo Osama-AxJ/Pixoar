@@ -1,0 +1,94 @@
+# .NET build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+arm64/
+artifacts/
+out/
+
+# Publish and installer output
+[Pp]ublish/
+[Dd]ist/
+installer-output/
+installers/
+setup-output/
+*.appx
+*.appxbundle
+*.cab
+*.msi
+*.msix
+*.msixbundle
+*.wixobj
+*.wixout
+*.wixpdb
+*.publishsettings
+*.zip
+*.7z
+*.rar
+
+# Test and coverage output
+[Tt]est[Rr]esult*/
+coverage*/
+*.coverage
+*.coveragexml
+*.lcov
+*.trx
+coverage.cobertura.xml
+coverage.opencover.xml
+
+# NuGet packages and restore artifacts
+packages/
+.nuget/packages/
+*.nupkg
+*.snupkg
+
+# IDE and editor files
+.vs/
+.vscode/
+.idea/
+_ReSharper*/
+*.DotSettings.user
+*.rsuser
+*.sln.docstates
+*.suo
+*.user
+*.userosscache
+
+# Local settings and runtime data
+settings.json
+settings.broken.json
+*.local.json
+*.deps.json
+*.runtimeconfig.json
+
+# Logs
+[Ll]ogs/
+*.binlog
+*.log
+
+# Temporary files
+*.bak
+*.cache
+*.orig
+*.temp
+*.tmp
+*.swp
+~$*
+
+# Crash dumps
+crash-dumps/
+crashdumps/
+*.crash
+*.dmp
+*.mdmp
+
+# OS files
+.DS_Store
+.Spotlight-V100/
+.Trashes/
+Desktop.ini
+ehthumbs.db
+Thumbs.db
