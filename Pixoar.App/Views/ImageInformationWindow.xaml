@@ -1,0 +1,230 @@
+<Window x:Class="Pixoar.App.Views.ImageInformationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Image Information"
+        Width="720"
+        Height="520"
+        MinWidth="640"
+        MinHeight="460"
+        Icon="/Resources/Assets/Branding/pixoar.ico"
+        WindowStartupLocation="CenterOwner">
+    <Grid Background="{StaticResource AppBackgroundBrush}" Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,16">
+            <TextBlock Text="{Binding FileName}"
+                       Style="{StaticResource PageTitleTextBlockStyle}" />
+            <TextBlock Text="{Binding FilePath}"
+                       Style="{StaticResource MutedTextBlockStyle}"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"
+                       TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <TabControl Grid.Row="1"
+                    TabStripPlacement="Left">
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE946;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,8,0" />
+                        <TextBlock Text="General" />
+                    </StackPanel>
+                </TabItem.Header>
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Top"
+                                   Text="File Name"
+                                   Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="1"
+                                   VerticalAlignment="Top"
+                                   Text="{Binding FileName}"
+                                   TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="0"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="Full Path"
+                                   Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="1"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="{Binding FilePath}"
+                                   TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <TextBlock Grid.Row="2"
+                                   Grid.Column="0"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="File Size"
+                                   Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="2"
+                                   Grid.Column="1"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="{Binding FileSize}" />
+
+                        <TextBlock Grid.Row="3"
+                                   Grid.Column="0"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="Created"
+                                   Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="3"
+                                   Grid.Column="1"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="{Binding CreatedDate}" />
+
+                        <TextBlock Grid.Row="4"
+                                   Grid.Column="0"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="Modified"
+                                   Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="4"
+                                   Grid.Column="1"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="{Binding LastModifiedDate}" />
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE91B;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,8,0" />
+                        <TextBlock Text="Image" />
+                    </StackPanel>
+                </TabItem.Header>
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Top" Text="Resolution" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" VerticalAlignment="Top" Text="{Binding Resolution}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,12,0,0" VerticalAlignment="Top" Text="Format" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" VerticalAlignment="Top" Text="{Binding Format}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,12,0,0" VerticalAlignment="Top" Text="Aspect Ratio" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" VerticalAlignment="Top" Text="{Binding AspectRatio}" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,12,0,0" VerticalAlignment="Top" Text="Color Depth" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" VerticalAlignment="Top" Text="{Binding ColorDepth}" />
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,12,0,0" VerticalAlignment="Top" Text="Alpha Channel" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" VerticalAlignment="Top" Text="{Binding HasAlpha}" />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,12,0,0" VerticalAlignment="Top" Text="Transparency" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="5"
+                                   Grid.Column="1"
+                                   Margin="0,12,0,0"
+                                   VerticalAlignment="Top"
+                                   Text="{Binding HasTransparency}" />
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <TabItem Visibility="{Binding IsDds, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8A5;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,8,0" />
+                        <TextBlock Text="DDS" />
+                    </StackPanel>
+                </TabItem.Header>
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Top" Text="Compression" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" VerticalAlignment="Top" Text="{Binding DdsCompression}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,12,0,0" VerticalAlignment="Top" Text="Mipmaps" Style="{StaticResource LabelTextBlockStyle}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" VerticalAlignment="Top" Text="{Binding DdsMipmaps}" />
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8A7;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,8,0" />
+                        <TextBlock Text="Actions" />
+                    </StackPanel>
+                </TabItem.Header>
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Text="Actions" Style="{StaticResource SectionTitleTextBlockStyle}" />
+                        <TextBlock Text="{Binding ActionStatus}"
+                                   Style="{StaticResource MutedTextBlockStyle}"
+                                   Margin="0,5,0,18" />
+
+                        <WrapPanel>
+                            <Button Command="{Binding OpenLocationCommand}" Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8B7;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,7,0" />
+                                    <TextBlock Text="Open Location" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding CopyPathCommand}" Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8C8;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,7,0" />
+                                    <TextBlock Text="Copy Path" />
+                                </StackPanel>
+                            </Button>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+            </TabItem>
+        </TabControl>
+
+        <Button Grid.Row="2"
+                HorizontalAlignment="Right"
+                Margin="0,18,0,0"
+                MinWidth="96"
+                IsCancel="True"
+                Content="Close" />
+    </Grid>
+</Window>

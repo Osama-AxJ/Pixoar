@@ -1,0 +1,93 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pixoar.Core\Pixoar.Core.csproj" />
+    <ProjectReference Include="..\Pixoar.Cli\Pixoar.Cli.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"
+                      Version="8.0.1"
+                      GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <AssemblyName>Pixoar.App</AssemblyName>
+    <RootNamespace>Pixoar.App</RootNamespace>
+    <ApplicationIcon>Resources\Assets\Branding\pixoar.ico</ApplicationIcon>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <DesktopExecutableName>Pixoar.exe</DesktopExecutableName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\Assets\Branding\pixoar-logo.png" />
+    <Content Include="Resources\Assets\Branding\pixoar.ico"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(PkgMicrosoft_Extensions_DependencyInjection)\LICENSE.TXT"
+             Link="licenses\Microsoft.Extensions-LICENSE.txt"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Condition="Exists('$(PkgMicrosoft_Extensions_DependencyInjection)\LICENSE.TXT')" />
+    <Content Include="$(PkgMicrosoft_Extensions_DependencyInjection)\THIRD-PARTY-NOTICES.TXT"
+             Link="licenses\Microsoft.Extensions-THIRD-PARTY-NOTICES.txt"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Condition="Exists('$(PkgMicrosoft_Extensions_DependencyInjection)\THIRD-PARTY-NOTICES.TXT')" />
+  </ItemGroup>
+
+  <Target Name="CopyPixoarCliToAppOutput" AfterTargets="Build">
+    <PropertyGroup>
+      <PixoarCliBaseOutputDirectory>$(MSBuildProjectDirectory)\..\Pixoar.Cli\bin\$(Configuration)\net8.0</PixoarCliBaseOutputDirectory>
+      <PixoarCliRuntimeOutputDirectory>$(PixoarCliBaseOutputDirectory)\$(RuntimeIdentifier)</PixoarCliRuntimeOutputDirectory>
+      <PixoarCliOutputDirectory Condition="'$(RuntimeIdentifier)' != '' And Exists('$(PixoarCliRuntimeOutputDirectory)\Pixoar.Cli.exe')">$(PixoarCliRuntimeOutputDirectory)</PixoarCliOutputDirectory>
+      <PixoarCliOutputDirectory Condition="'$(PixoarCliOutputDirectory)' == ''">$(PixoarCliBaseOutputDirectory)</PixoarCliOutputDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <PixoarCliOutputFiles Include="$(PixoarCliOutputDirectory)\Pixoar.Cli.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PixoarCliOutputFiles)"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="RenamePixoarAppHostOutput"
+          AfterTargets="CopyPixoarCliToAppOutput"
+          Condition="Exists('$(OutDir)$(AssemblyName).exe')">
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).exe"
+          DestinationFiles="$(OutDir)$(DesktopExecutableName)"
+          SkipUnchangedFiles="true" />
+    <Delete Files="$(OutDir)$(AssemblyName).exe" />
+  </Target>
+
+  <Target Name="CopyPixoarCliToAppPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <PixoarCliBasePublishDirectory>$(MSBuildProjectDirectory)\..\Pixoar.Cli\bin\$(Configuration)\net8.0</PixoarCliBasePublishDirectory>
+      <PixoarCliRuntimePublishDirectory>$(PixoarCliBasePublishDirectory)\$(RuntimeIdentifier)</PixoarCliRuntimePublishDirectory>
+      <PixoarCliPublishDirectory Condition="'$(RuntimeIdentifier)' != '' And Exists('$(PixoarCliRuntimePublishDirectory)\Pixoar.Cli.exe')">$(PixoarCliRuntimePublishDirectory)</PixoarCliPublishDirectory>
+      <PixoarCliPublishDirectory Condition="'$(PixoarCliPublishDirectory)' == ''">$(PixoarCliBasePublishDirectory)</PixoarCliPublishDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <PixoarCliPublishFiles Include="$(PixoarCliPublishDirectory)\Pixoar.Cli.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PixoarCliPublishFiles)"
+          DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="RenamePixoarAppHostPublish"
+          AfterTargets="CopyPixoarCliToAppPublish"
+          Condition="Exists('$(PublishDir)$(AssemblyName).exe')">
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName).exe"
+          DestinationFiles="$(PublishDir)$(DesktopExecutableName)"
+          SkipUnchangedFiles="true" />
+    <Delete Files="$(PublishDir)$(AssemblyName).exe" />
+  </Target>
+
+</Project>
