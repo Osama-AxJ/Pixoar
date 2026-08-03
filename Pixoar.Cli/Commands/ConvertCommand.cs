@@ -32,9 +32,37 @@ internal sealed class ConvertCommand(
             return CommandResult.Failure("Missing required option: --format", CliExitCodes.InvalidArguments);
         }
 
-        if (!CliFormatParser.TryParseImageFormat(formatValue, out var outputFormat))
+        DdsCompressionMode? compressionOverride = null;
+        ImageFormat outputFormat;
+        if (CliFormatParser.TryParseExplorerDdsFormat(formatValue, out var explorerCompression))
+        {
+            outputFormat = ImageFormat.Dds;
+            compressionOverride = explorerCompression;
+        }
+        else if (!CliFormatParser.TryParseImageFormat(formatValue, out outputFormat))
         {
             return CommandResult.Failure($"Unsupported output format: {formatValue}", CliExitCodes.InvalidArguments);
+        }
+
+        if (options.HasOption("compression"))
+        {
+            var compressionValue = options.GetOption("compression");
+            if (outputFormat != ImageFormat.Dds)
+            {
+                return CommandResult.Failure(
+                    "--compression can only be used with --format dds.",
+                    CliExitCodes.InvalidArguments);
+            }
+
+            if (string.IsNullOrWhiteSpace(compressionValue) ||
+                !CliFormatParser.TryParseDdsCompression(compressionValue, out var parsedCompression))
+            {
+                return CommandResult.Failure(
+                    $"Unsupported DDS compression: {compressionValue ?? "<missing>"}. Use DXT1, DXT3, DXT5, BC7, or Uncompressed.",
+                    CliExitCodes.InvalidArguments);
+            }
+
+            compressionOverride = parsedCompression;
         }
 
         if (options.Values.Count == 0)
@@ -75,6 +103,7 @@ internal sealed class ConvertCommand(
         {
             InputPath = path,
             OutputFormat = outputFormat,
+            DdsCompression = compressionOverride,
             OutputFolder = options.GetOption("output")
         });
 

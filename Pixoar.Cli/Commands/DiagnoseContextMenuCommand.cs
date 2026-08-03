@@ -29,7 +29,7 @@ internal sealed class DiagnoseContextMenuCommand(IContextMenuService contextMenu
     private static IEnumerable<ContextMenuParseCheck> CreateParseChecks()
     {
         yield return CheckConvert("convert jpg", "jpg");
-        yield return CheckConvert("convert dds", "dds");
+        yield return CheckConvert("convert dds bc7", "dds-bc7");
         yield return CheckResize("resize 50", "50");
         yield return CheckResize("resize 75", "75");
     }

@@ -269,6 +269,10 @@
                     </StackPanel>
 
                     <Grid Grid.Row="1" Margin="0,18,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="132" />
                             <ColumnDefinition Width="220" />
@@ -279,6 +283,19 @@
                         <ComboBox Grid.Column="1"
                                   ItemsSource="{Binding OutputFormats}"
                                   SelectedItem="{Binding SelectedOutputFormat}" />
+
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,14,0,0"
+                                   Text="Compression"
+                                   Style="{StaticResource LabelTextBlockStyle}"
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding IsDdsOutputFormat, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <ComboBox Grid.Row="1"
+                                  Grid.Column="1"
+                                  Margin="0,14,0,0"
+                                  ItemsSource="{Binding DdsCompressionOptions}"
+                                  SelectedItem="{Binding SelectedDdsCompression}"
+                                  Visibility="{Binding IsDdsOutputFormat, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </Grid>
 
                     <Button Grid.Row="2"

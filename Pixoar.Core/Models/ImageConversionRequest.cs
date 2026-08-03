@@ -16,6 +16,11 @@ public sealed class ImageConversionRequest
     public ImageFormat OutputFormat { get; set; }
 
     /// <summary>
+    /// Gets or sets an optional DDS compression override for this conversion only.
+    /// </summary>
+    public DdsCompressionMode? DdsCompression { get; set; }
+
+    /// <summary>
     /// Gets or sets an optional explicit output folder.
     /// </summary>
     public string? OutputFolder { get; set; }

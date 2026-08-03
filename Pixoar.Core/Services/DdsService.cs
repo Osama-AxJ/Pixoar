@@ -17,7 +17,25 @@ internal sealed class DdsService(
         string outputPath,
         CancellationToken cancellationToken = default)
     {
+        await ConvertToDdsAsync(
+            inputPath,
+            outputPath,
+            compressionOverride: null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ConvertToDdsAsync(
+        string inputPath,
+        string outputPath,
+        DdsCompressionMode? compressionOverride,
+        CancellationToken cancellationToken = default)
+    {
         var settings = await settingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
+        var ddsSettings = CloneDdsSettings(settings.Dds);
+        if (compressionOverride.HasValue)
+        {
+            ddsSettings.Compression = compressionOverride.Value;
+        }
 
         using var tempDirectory = new TemporaryDirectory(logger);
         var intermediatePath = Path.Combine(tempDirectory.Path, "dds-input.png");
@@ -31,7 +49,7 @@ internal sealed class DdsService(
         await ddsEncoder.ConvertToDdsAsync(
             intermediatePath,
             outputPath,
-            CloneDdsSettings(settings.Dds),
+            ddsSettings,
             cancellationToken).ConfigureAwait(false);
     }
 

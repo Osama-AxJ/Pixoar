@@ -540,6 +540,12 @@ internal static class Program
             }));
         Assert(ddsConversion.Success && ddsConversion.OutputPath is not null, "DDS encoding regression detected.");
 
+        await VerifyDdsConversionOverridesAsync(
+            fixtureRoot,
+            settingsService,
+            conversionService,
+            png);
+
         await VerifyDdsSourceConversionMatrixAsync(
             dds,
             conversionRoot,
@@ -573,6 +579,48 @@ internal static class Program
         Assert(reloadedSettings.Dds.PreserveAlpha, "DDS alpha setting did not persist.");
 
         Console.WriteLine("PASS regressions: standard/DDS conversion, DDS preview/info, settings, and texconv discovery.");
+    }
+
+    private static async Task VerifyDdsConversionOverridesAsync(
+        string fixtureRoot,
+        ISettingsService settingsService,
+        IImageConversionService conversionService,
+        string inputPath)
+    {
+        var compressionCases = new[]
+        {
+            new DdsCompressionCase(DdsCompressionMode.Dxt1, "DXT1", null),
+            new DdsCompressionCase(DdsCompressionMode.Dxt3, "DXT3", null),
+            new DdsCompressionCase(DdsCompressionMode.Dxt5, "DXT5", null),
+            new DdsCompressionCase(DdsCompressionMode.Bc7, "DX10", 99u),
+            new DdsCompressionCase(DdsCompressionMode.Uncompressed, "\0\0\0\0", null)
+        };
+        var savedCompression = settingsService.Current.Dds.Compression;
+
+        foreach (var compressionCase in compressionCases)
+        {
+            var result = await conversionService.ConvertAsync(new ImageConversionRequest
+            {
+                InputPath = inputPath,
+                OutputFormat = ImageFormat.Dds,
+                DdsCompression = compressionCase.Mode,
+                OutputFolder = Path.Combine(
+                    fixtureRoot,
+                    "DdsOverrides",
+                    compressionCase.Mode.ToString())
+            });
+            Assert(
+                result.Success && result.OutputPath is not null,
+                $"DDS conversion override failed for {compressionCase.Mode}.");
+            Assert(
+                CompressionMatches(ReadDdsHeader(result.OutputPath!), compressionCase),
+                $"DDS conversion override did not use {compressionCase.Mode}.");
+            Assert(
+                settingsService.Current.Dds.Compression == savedCompression,
+                $"DDS conversion override changed the saved default to {compressionCase.Mode}.");
+        }
+
+        Console.WriteLine("PASS DDS conversion overrides: DXT1/DXT3/DXT5/BC7/Uncompressed without changing the saved default.");
     }
 
     private static async Task RunOutputOrganizationAsync(string runRoot)

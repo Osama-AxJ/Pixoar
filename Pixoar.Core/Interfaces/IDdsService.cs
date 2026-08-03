@@ -25,6 +25,20 @@ public interface IDdsService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Converts an image to DDS with an optional per-operation compression override.
+    /// </summary>
+    /// <param name="inputPath">The input image path.</param>
+    /// <param name="outputPath">The output DDS path.</param>
+    /// <param name="compressionOverride">The compression used for this operation, or <see langword="null" /> for the saved default.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>A task that completes when conversion succeeds.</returns>
+    Task ConvertToDdsAsync(
+        string inputPath,
+        string outputPath,
+        DdsCompressionMode? compressionOverride,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Converts a DDS image to a non-DDS image.
     /// </summary>
     /// <param name="inputPath">The DDS input path.</param>

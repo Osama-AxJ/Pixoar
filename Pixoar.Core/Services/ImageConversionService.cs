@@ -46,6 +46,7 @@ internal sealed class ImageConversionService(
                     stagedOutput.Path,
                     inputFormat,
                     request.OutputFormat,
+                    request.DdsCompression,
                     cancellationToken).ConfigureAwait(false);
             }
             else
@@ -96,6 +97,7 @@ internal sealed class ImageConversionService(
         string outputPath,
         ImageFormat inputFormat,
         ImageFormat outputFormat,
+        DdsCompressionMode? ddsCompression,
         CancellationToken cancellationToken)
     {
         if (inputFormat == ImageFormat.Dds && outputFormat == ImageFormat.Dds)
@@ -106,7 +108,11 @@ internal sealed class ImageConversionService(
 
         if (outputFormat == ImageFormat.Dds)
         {
-            await ddsService.ConvertToDdsAsync(inputPath, outputPath, cancellationToken).ConfigureAwait(false);
+            await ddsService.ConvertToDdsAsync(
+                inputPath,
+                outputPath,
+                ddsCompression,
+                cancellationToken).ConfigureAwait(false);
             return;
         }
 

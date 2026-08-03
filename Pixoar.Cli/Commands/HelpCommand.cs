@@ -26,7 +26,7 @@ internal sealed class HelpCommand : ICommand
         Usage:
           Pixoar.Cli help
           Pixoar.Cli settings
-          Pixoar.Cli convert --format <format> [--output <folder>] [--recursive] <file|folder> [...]
+          Pixoar.Cli convert --format <format> [--compression <mode>] [--output <folder>] [--recursive] <file|folder> [...]
           Pixoar.Cli resize (--preset <percent> | --percentage <number> | --width <px> [--height <px>] | --height <px>) [--mode fit|crop|stretch] [--output <folder>] [--recursive] <file|folder> [...]
           Pixoar.Cli info [--json] [--recursive] <file|folder> [...]
           Pixoar.Cli uninstall [--remove-user-data]
@@ -34,7 +34,7 @@ internal sealed class HelpCommand : ICommand
           Pixoar.Cli repair-context-menu
 
         Commands:
-          convert   Convert one or more images to PNG, JPG, JPEG, WEBP, BMP, TIFF, or DDS.
+          convert   Convert one or more images to PNG, JPG, WEBP, BMP, TIFF, or DDS.
           resize    Resize one or more images by percentage preset or dimensions.
           info      Print image metadata in text or JSON.
           settings  Show shared settings and log locations.
@@ -42,9 +42,13 @@ internal sealed class HelpCommand : ICommand
           diagnose-context-menu Diagnose installed Explorer context menu commands.
           repair-context-menu   Rebuild Pixoar Explorer context menu commands.
 
+        DDS compression modes:
+          DXT1, DXT3, DXT5, BC7, or Uncompressed. The configured default is used when omitted.
+
         Examples:
           Pixoar.Cli convert --format jpg ".\Images\image.png"
           Pixoar.Cli convert --format dds ".\Images\image.png"
+          Pixoar.Cli convert --format dds --compression BC7 ".\Images\image.png"
           Pixoar.Cli resize --preset 50% ".\Images\image.png"
           Pixoar.Cli resize --preset 75% ".\Images\image.png"
           Pixoar.Cli resize --percentage 50 ".\Images\image.png"

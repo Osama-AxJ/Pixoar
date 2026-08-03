@@ -52,4 +52,44 @@ internal static class CliFormatParser
                 return false;
         }
     }
+
+    public static bool TryParseDdsCompression(string value, out DdsCompressionMode compression)
+    {
+        switch (value.Trim().ToUpperInvariant())
+        {
+            case "DXT1":
+                compression = DdsCompressionMode.Dxt1;
+                return true;
+            case "DXT3":
+                compression = DdsCompressionMode.Dxt3;
+                return true;
+            case "DXT5":
+                compression = DdsCompressionMode.Dxt5;
+                return true;
+            case "BC7":
+                compression = DdsCompressionMode.Bc7;
+                return true;
+            case "UNCOMPRESSED":
+                compression = DdsCompressionMode.Uncompressed;
+                return true;
+            default:
+                compression = default;
+                return false;
+        }
+    }
+
+    public static bool TryParseExplorerDdsFormat(
+        string value,
+        out DdsCompressionMode compression)
+    {
+        const string prefix = "dds-";
+        var normalized = value.Trim();
+        if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseDdsCompression(normalized[prefix.Length..], out compression);
+        }
+
+        compression = default;
+        return false;
+    }
 }

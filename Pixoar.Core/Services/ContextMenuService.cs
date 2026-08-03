@@ -31,6 +31,15 @@ internal sealed class ContextMenuService(
         ".dds"
     ];
 
+    private static readonly (string DisplayName, string FormatArgument)[] DdsCompressionCommands =
+    [
+        ("DXT1", "dds-dxt1"),
+        ("DXT3", "dds-dxt3"),
+        ("DXT5", "dds-dxt5"),
+        ("BC7", "dds-bc7"),
+        ("Uncompressed", "dds-uncompressed")
+    ];
+
     public async Task<ContextMenuInstallationStatus> ApplyAsync(CancellationToken cancellationToken = default)
     {
         var status = await GetInstallationStatusAsync(cancellationToken).ConfigureAwait(false);
@@ -431,6 +440,27 @@ internal sealed class ContextMenuService(
                     ? formatArgument.ToUpperInvariant()
                     : preset.Name;
                 var keyName = $"{index + 1:00}_{CreateRegistryKeyName(displayName)}";
+
+                if (formatArgument.Equals("dds", StringComparison.OrdinalIgnoreCase))
+                {
+                    var ddsKey = CreateExpectedSubmenu("DDS", executablePaths.ContextMenuIconPath);
+                    convertShellKey.SubKeys.Add(keyName, ddsKey);
+                    var ddsShellKey = ddsKey.AddSubKey("shell");
+                    for (var compressionIndex = 0; compressionIndex < DdsCompressionCommands.Length; compressionIndex++)
+                    {
+                        var command = DdsCompressionCommands[compressionIndex];
+                        AddExpectedCommand(
+                            ddsShellKey,
+                            $"{compressionIndex + 1:00}_{CreateRegistryKeyName(command.DisplayName)}",
+                            command.DisplayName,
+                            executablePaths.AppPath,
+                            $"--explorer-batch convert --format {command.FormatArgument}",
+                            executablePaths.ContextMenuIconPath);
+                    }
+
+                    continue;
+                }
+
                 AddExpectedCommand(
                     convertShellKey,
                     keyName,
@@ -809,7 +839,7 @@ internal sealed class ContextMenuService(
         else if (IsConvertAction(actionPath))
         {
             ValidateAppPath(parsedCommand, expectedAppPath, issues);
-            ValidateConvertCommand(parsedCommand, issues);
+            ValidateConvertCommand(actionPath, parsedCommand, issues);
         }
         else if (actionText.Equals("Image Information", StringComparison.OrdinalIgnoreCase))
         {
@@ -886,7 +916,10 @@ internal sealed class ContextMenuService(
         ValidateArguments(parsedCommand, $"--explorer-batch resize --percentage {percentage}", issues);
     }
 
-    private static void ValidateConvertCommand(ParsedRegistryCommand parsedCommand, List<string> issues)
+    private static void ValidateConvertCommand(
+        IReadOnlyList<string> actionPath,
+        ParsedRegistryCommand parsedCommand,
+        List<string> issues)
     {
         var arguments = parsedCommand.ArgumentsBeforeFile.Split(
             (char[]?)null,
@@ -902,6 +935,23 @@ internal sealed class ContextMenuService(
         }
 
         var format = arguments[3];
+        if (actionPath.Count == 3 &&
+            actionPath[1].Equals("DDS", StringComparison.OrdinalIgnoreCase))
+        {
+            var command = DdsCompressionCommands.FirstOrDefault(option =>
+                option.DisplayName.Equals(actionPath[2], StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(command.FormatArgument))
+            {
+                issues.Add($"The DDS compression menu entry is not recognized: {actionPath[2]}.");
+            }
+            else if (!format.Equals(command.FormatArgument, StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add($"Expected DDS compression format argument: {command.FormatArgument}.");
+            }
+
+            return;
+        }
+
         if (!SupportedExtensions.Contains($".{format}", StringComparer.OrdinalIgnoreCase))
         {
             issues.Add($"The convert command uses an unsupported format: {format}.");

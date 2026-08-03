@@ -29,6 +29,7 @@ public sealed class MainViewModel : ViewModelBase
     private ImageFileItem? _selectedImage;
     private string _statusText = "Ready";
     private string _selectedOutputFormat = "PNG";
+    private string _selectedDdsCompression = "DXT5";
     private string _resizeWidth = string.Empty;
     private string _resizeHeight = string.Empty;
     private bool _keepAspectRatio = true;
@@ -65,7 +66,9 @@ public sealed class MainViewModel : ViewModelBase
 
         ApplicationTitle = "Pixoar";
         VersionText = $"Version {GetVersionText()}";
-        OutputFormats = ["PNG", "JPG", "JPEG", "WEBP", "BMP", "TIFF", "DDS"];
+        OutputFormats = ["PNG", "JPG", "WEBP", "BMP", "TIFF", "DDS"];
+        DdsCompressionOptions = ["DXT1", "DXT3", "DXT5", "BC7", "Uncompressed"];
+        _selectedDdsCompression = FormatDdsCompression(settingsService.Current.Dds.Compression);
         ResizeMethods = ["By Dimensions", "By Percentage"];
         ResizePercentages = ["50%", "75%"];
         ResizeModes = ["Stretch", "Crop", "Fit"];
@@ -74,7 +77,7 @@ public sealed class MainViewModel : ViewModelBase
         AddFolderCommand = new AsyncRelayCommand(_ => AddFolderAsync(), _ => !IsBusy);
         RemoveSelectedCommand = new RelayCommand(_ => RemoveSelected(), _ => HasSelection && !IsBusy);
         ClearListCommand = new RelayCommand(_ => ClearList(), _ => Images.Count > 0 && !IsBusy);
-        OpenSettingsCommand = new RelayCommand(_ => _windowService.ShowSettingsWindow(), _ => !IsBusy);
+        OpenSettingsCommand = new RelayCommand(_ => OpenSettings(), _ => !IsBusy);
         ShowImageInformationCommand = new AsyncRelayCommand(_ => ShowImageInformationAsync(), _ => SelectedImage is not null && !IsBusy);
         DropFilesCommand = new AsyncRelayCommand(AddDroppedPathsAsync, _ => !IsBusy);
         ConvertCommand = new AsyncRelayCommand(_ => ConvertSelectedAsync(), _ => HasSelection && !IsBusy);
@@ -113,6 +116,11 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets the supported output formats shown by the convert panel.
     /// </summary>
     public IReadOnlyList<string> OutputFormats { get; }
+
+    /// <summary>
+    /// Gets the DDS compression modes shown by the convert panel.
+    /// </summary>
+    public IReadOnlyList<string> DdsCompressionOptions { get; }
 
     /// <summary>
     /// Gets the resize methods shown by the resize panel.
@@ -271,7 +279,28 @@ public sealed class MainViewModel : ViewModelBase
     public string SelectedOutputFormat
     {
         get => _selectedOutputFormat;
-        set => SetProperty(ref _selectedOutputFormat, value);
+        set
+        {
+            if (SetProperty(ref _selectedOutputFormat, value))
+            {
+                OnPropertyChanged(nameof(IsDdsOutputFormat));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether DDS is the selected output format.
+    /// </summary>
+    public bool IsDdsOutputFormat =>
+        string.Equals(SelectedOutputFormat, "DDS", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets or sets the DDS compression used for the current desktop conversion.
+    /// </summary>
+    public string SelectedDdsCompression
+    {
+        get => _selectedDdsCompression;
+        set => SetProperty(ref _selectedDdsCompression, value);
     }
 
     /// <summary>
@@ -537,6 +566,20 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    private void OpenSettings()
+    {
+        var previousDefault = FormatDdsCompression(_settingsService.Current.Dds.Compression);
+        _windowService.ShowSettingsWindow();
+
+        if (string.Equals(
+            SelectedDdsCompression,
+            previousDefault,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            SelectedDdsCompression = FormatDdsCompression(_settingsService.Current.Dds.Compression);
+        }
+    }
+
     private async Task ConvertSelectedAsync()
     {
         if (RequiresOverwriteConfirmation() && !_userPromptService.ConfirmOverwriteRisk())
@@ -551,11 +594,24 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
+        DdsCompressionMode? ddsCompression = null;
+        if (outputFormat == ImageFormat.Dds)
+        {
+            if (!TryParseDdsCompression(SelectedDdsCompression, out var parsedCompression))
+            {
+                AddError($"Unsupported DDS compression: {SelectedDdsCompression}");
+                return;
+            }
+
+            ddsCompression = parsedCompression;
+        }
+
         var requests = SelectedImages
             .Select(image => new ImageConversionRequest
             {
                 InputPath = image.FilePath,
-                OutputFormat = outputFormat
+                OutputFormat = outputFormat,
+                DdsCompression = ddsCompression
             })
             .ToArray();
 
@@ -908,6 +964,43 @@ public sealed class MainViewModel : ViewModelBase
             "Crop" => ResizeMode.Crop,
             _ => ResizeMode.Fit
         };
+    }
+
+    private static string FormatDdsCompression(DdsCompressionMode compression)
+    {
+        return compression switch
+        {
+            DdsCompressionMode.Dxt1 => "DXT1",
+            DdsCompressionMode.Dxt3 => "DXT3",
+            DdsCompressionMode.Bc7 => "BC7",
+            DdsCompressionMode.Uncompressed => "Uncompressed",
+            _ => "DXT5"
+        };
+    }
+
+    private static bool TryParseDdsCompression(string value, out DdsCompressionMode compression)
+    {
+        switch (value.Trim().ToUpperInvariant())
+        {
+            case "DXT1":
+                compression = DdsCompressionMode.Dxt1;
+                return true;
+            case "DXT3":
+                compression = DdsCompressionMode.Dxt3;
+                return true;
+            case "DXT5":
+                compression = DdsCompressionMode.Dxt5;
+                return true;
+            case "BC7":
+                compression = DdsCompressionMode.Bc7;
+                return true;
+            case "UNCOMPRESSED":
+                compression = DdsCompressionMode.Uncompressed;
+                return true;
+            default:
+                compression = default;
+                return false;
+        }
     }
 
     private static int? ParsePositiveInt(string value)
