@@ -11,6 +11,6 @@ public interface IOutputFileService
     /// Creates a safe output path according to user settings.
     /// </summary>
     /// <param name="request">The output file request.</param>
-    /// <returns>The resolved output path.</returns>
-    string CreateOutputPath(OutputFileRequest request);
+    /// <returns>The resolved output path and conflict action.</returns>
+    OutputFileResolution CreateOutputPath(OutputFileRequest request);
 }

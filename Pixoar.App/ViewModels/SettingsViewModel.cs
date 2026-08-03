@@ -29,8 +29,9 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _isCheckingForUpdates;
     private bool _saveBesideOriginal = true;
     private string _customOutputFolder = string.Empty;
-    private bool _preventOverwrite = true;
-    private bool _renameDuplicates = true;
+    private string _selectedOutputConflictBehavior = "Rename duplicates automatically";
+    private bool _saveConvertedFilesInConvertedFolder;
+    private bool _saveResizedFilesInResizeFolder;
     private string _selectedCompression = "DXT5";
     private bool _generateMipmaps = true;
     private bool _preserveAlpha = true;
@@ -77,8 +78,9 @@ public sealed class SettingsViewModel : ViewModelBase
         _checkForUpdates = settings.General.CheckForUpdates;
         _saveBesideOriginal = settings.Output.SaveBesideOriginal;
         _customOutputFolder = settings.Output.CustomOutputFolder ?? string.Empty;
-        _preventOverwrite = settings.Output.PreventOverwrite;
-        _renameDuplicates = settings.Output.RenameDuplicatesAutomatically;
+        _selectedOutputConflictBehavior = FormatOutputConflictBehavior(settings.Output.ConflictBehavior);
+        _saveConvertedFilesInConvertedFolder = settings.Output.SaveConvertedFilesInConvertedFolder;
+        _saveResizedFilesInResizeFolder = settings.Output.SaveResizedFilesInResizeFolder;
         _selectedCompression = FormatCompression(settings.Dds.Compression.ToString());
         _generateMipmaps = settings.Dds.GenerateMipmaps;
         _preserveAlpha = settings.Dds.PreserveAlpha;
@@ -272,21 +274,30 @@ public sealed class SettingsViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether overwrites should be prevented.
+    /// Gets or sets the selected output conflict behavior.
     /// </summary>
-    public bool PreventOverwrite
+    public string SelectedOutputConflictBehavior
     {
-        get => _preventOverwrite;
-        set => SetProperty(ref _preventOverwrite, value);
+        get => _selectedOutputConflictBehavior;
+        set => SetProperty(ref _selectedOutputConflictBehavior, value);
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether duplicate names should be renamed.
+    /// Gets or sets a value indicating whether converted files use a Converted folder.
     /// </summary>
-    public bool RenameDuplicates
+    public bool SaveConvertedFilesInConvertedFolder
     {
-        get => _renameDuplicates;
-        set => SetProperty(ref _renameDuplicates, value);
+        get => _saveConvertedFilesInConvertedFolder;
+        set => SetProperty(ref _saveConvertedFilesInConvertedFolder, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether resized files use a Resize folder.
+    /// </summary>
+    public bool SaveResizedFilesInResizeFolder
+    {
+        get => _saveResizedFilesInResizeFolder;
+        set => SetProperty(ref _saveResizedFilesInResizeFolder, value);
     }
 
     /// <summary>
@@ -618,8 +629,9 @@ public sealed class SettingsViewModel : ViewModelBase
             settings.Output.CustomOutputFolder = string.IsNullOrWhiteSpace(CustomOutputFolder)
                 ? null
                 : CustomOutputFolder.Trim();
-            settings.Output.PreventOverwrite = PreventOverwrite;
-            settings.Output.RenameDuplicatesAutomatically = RenameDuplicates;
+            settings.Output.ConflictBehavior = ParseOutputConflictBehavior(SelectedOutputConflictBehavior);
+            settings.Output.SaveConvertedFilesInConvertedFolder = SaveConvertedFilesInConvertedFolder;
+            settings.Output.SaveResizedFilesInResizeFolder = SaveResizedFilesInResizeFolder;
 
             settings.Dds.Compression = ParseCompression(SelectedCompression);
             settings.Dds.GenerateMipmaps = GenerateMipmaps;
@@ -634,6 +646,26 @@ public sealed class SettingsViewModel : ViewModelBase
             settings.ResizePresets = ResizePresets.Select(CreateResizePreset).ToList();
             settings.ConvertPresets = ConvertPresets.Select(CreateConvertPreset).ToList();
         });
+    }
+
+    private static string FormatOutputConflictBehavior(OutputConflictBehavior behavior)
+    {
+        return behavior switch
+        {
+            OutputConflictBehavior.SkipExistingFiles => "Skip existing files",
+            OutputConflictBehavior.OverwriteExistingFiles => "Overwrite existing files",
+            _ => "Rename duplicates automatically"
+        };
+    }
+
+    private static OutputConflictBehavior ParseOutputConflictBehavior(string value)
+    {
+        return value switch
+        {
+            "Skip existing files" => OutputConflictBehavior.SkipExistingFiles,
+            "Overwrite existing files" => OutputConflictBehavior.OverwriteExistingFiles,
+            _ => OutputConflictBehavior.RenameDuplicatesAutomatically
+        };
     }
 
     private void RefreshResizeCommands()

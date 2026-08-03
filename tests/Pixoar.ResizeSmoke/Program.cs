@@ -28,8 +28,17 @@ internal static class Program
 
         try
         {
-            await RunAsync(runRoot);
-            Console.WriteLine("PASS: resize smoke matrix and regressions completed.");
+            if (args.Contains("--output-organization", StringComparer.OrdinalIgnoreCase))
+            {
+                await RunOutputOrganizationAsync(runRoot);
+                Console.WriteLine("PASS: output organization and collision behavior verified.");
+            }
+            else
+            {
+                await RunAsync(runRoot);
+                Console.WriteLine("PASS: resize smoke matrix and regressions completed.");
+            }
+
             return 0;
         }
         catch (Exception exception)
@@ -257,14 +266,14 @@ internal static class Program
         Assert(
             string.Equals(
                 Path.GetExtension(outputPath),
-                $".{fixture.PrimaryExtension}",
+                $".{fixture.InputExtension}",
                 StringComparison.OrdinalIgnoreCase),
             $"{fixture.Name} output extension was not preserved: {outputPath}");
         Assert(
-            Path.GetFileNameWithoutExtension(outputPath).EndsWith(
+            !Path.GetFileNameWithoutExtension(outputPath).EndsWith(
                 expectedSuffix,
                 StringComparison.OrdinalIgnoreCase),
-            $"{fixture.Name} output naming did not contain {expectedSuffix}: {outputPath}");
+            $"{fixture.Name} output naming still contained the operation suffix {expectedSuffix}: {outputPath}");
 
         var information = await infoService.GetInformationAsync(outputPath);
         Assert(information.Format == fixture.Format, $"{fixture.Name} output format could not be reopened.");
@@ -338,7 +347,7 @@ internal static class Program
                 ?? throw new InvalidOperationException($"Batch output path missing for {fixture.Name}.");
             Assert(File.Exists(outputPath), $"Batch output missing for {fixture.Name}.");
             Assert(
-                Path.GetFileNameWithoutExtension(outputPath).EndsWith("_50pct_2", StringComparison.OrdinalIgnoreCase),
+                Path.GetFileNameWithoutExtension(outputPath).EndsWith("_4", StringComparison.OrdinalIgnoreCase),
                 $"Duplicate output naming failed for {fixture.Name}: {outputPath}");
             var information = await infoService.GetInformationAsync(outputPath);
             Assert(
@@ -346,7 +355,7 @@ internal static class Program
                 $"Batch output dimensions failed for {fixture.Name}.");
         }
 
-        Console.WriteLine("PASS batch: 8/8 succeeded, duplicate suffix _2, 16 progress events.");
+        Console.WriteLine("PASS batch: 8/8 succeeded, numbered duplicates, 16 progress events.");
     }
 
     private static async Task VerifyDdsSettingsAsync(
@@ -466,7 +475,7 @@ internal static class Program
         var original = FileSnapshot.Create(failureInput);
         var blockedOutputPath = Path.Combine(
             Path.GetDirectoryName(failureInput)!,
-            "failure_cleanup_25pct.dds");
+            "failure_cleanup_1.dds");
         Directory.CreateDirectory(blockedOutputPath);
 
         try
@@ -566,6 +575,134 @@ internal static class Program
         Console.WriteLine("PASS regressions: standard/DDS conversion, DDS preview/info, settings, and texconv discovery.");
     }
 
+    private static async Task RunOutputOrganizationAsync(string runRoot)
+    {
+        var appDataRoot = Path.Combine(runRoot, "AppData");
+        var pathProvider = new SmokeApplicationPathProvider(appDataRoot);
+        Directory.CreateDirectory(appDataRoot);
+        await File.WriteAllTextAsync(
+            pathProvider.SettingsFilePath,
+            """
+            {
+              "schemaVersion": 1,
+              "output": {
+                "saveBesideOriginal": true,
+                "preventOverwrite": false,
+                "renameDuplicatesAutomatically": false
+              }
+            }
+            """);
+
+        using var provider = CreateProvider(pathProvider);
+        var settingsService = provider.GetRequiredService<ISettingsService>();
+        var conversionService = provider.GetRequiredService<IImageConversionService>();
+        var resizeService = provider.GetRequiredService<IImageResizeService>();
+        var settings = await settingsService.LoadAsync();
+
+        Assert(
+            settings.Output.ConflictBehavior == OutputConflictBehavior.RenameDuplicatesAutomatically,
+            "Legacy output settings did not migrate to automatic duplicate renaming.");
+        var migratedJson = await File.ReadAllTextAsync(pathProvider.SettingsFilePath);
+        Assert(
+            migratedJson.Contains("\"conflictBehavior\": \"renameDuplicatesAutomatically\"", StringComparison.Ordinal) &&
+            !migratedJson.Contains("\"preventOverwrite\":", StringComparison.OrdinalIgnoreCase) &&
+            !migratedJson.Contains("\"renameDuplicatesAutomatically\":", StringComparison.OrdinalIgnoreCase),
+            "Legacy output conflict properties were not replaced in persisted settings.");
+
+        await settingsService.UpdateAsync(current =>
+        {
+            current.Output.ConflictBehavior = OutputConflictBehavior.RenameDuplicatesAutomatically;
+            current.Output.SaveConvertedFilesInConvertedFolder = true;
+            current.Output.SaveResizedFilesInResizeFolder = true;
+        });
+
+        var sourceA = Path.Combine(runRoot, "Sources", "A");
+        var sourceB = Path.Combine(runRoot, "Sources", "B");
+        Directory.CreateDirectory(sourceA);
+        Directory.CreateDirectory(sourceB);
+        var logoA = Path.Combine(sourceA, "logo.png");
+        var wallA = Path.Combine(sourceA, "wall.png");
+        var logoB = Path.Combine(sourceB, "logo.png");
+        WriteFixture(logoA, ImageFormat.Png);
+        WriteFixture(wallA, ImageFormat.Png);
+        WriteFixture(logoB, ImageFormat.Png);
+        var originals = new[] { logoA, wallA, logoB }
+            .ToDictionary(path => path, FileSnapshot.Create, StringComparer.OrdinalIgnoreCase);
+
+        var singleConvert = await conversionService.ConvertAsync(new ImageConversionRequest
+        {
+            InputPath = logoA,
+            OutputFormat = ImageFormat.Jpeg
+        });
+        var expectedSingleConvert = Path.Combine(sourceA, "Converted", "logo.jpg");
+        Assert(
+            singleConvert.Success && PathsEqual(singleConvert.OutputPath, expectedSingleConvert),
+            "Single conversion did not preserve the basename in the Converted folder.");
+
+        var batchConvert = await conversionService.ConvertBatchAsync(
+        [
+            new ImageConversionRequest { InputPath = wallA, OutputFormat = ImageFormat.Webp },
+            new ImageConversionRequest { InputPath = logoB, OutputFormat = ImageFormat.Webp }
+        ]);
+        Assert(
+            batchConvert.SuccessCount == 2 &&
+            File.Exists(Path.Combine(sourceA, "Converted", "wall.webp")) &&
+            File.Exists(Path.Combine(sourceB, "Converted", "logo.webp")),
+            "Batch conversion did not preserve per-source Converted folder grouping.");
+
+        var duplicateOne = await conversionService.ConvertAsync(new ImageConversionRequest
+        {
+            InputPath = logoA,
+            OutputFormat = ImageFormat.Jpeg
+        });
+        var duplicateTwo = await conversionService.ConvertAsync(new ImageConversionRequest
+        {
+            InputPath = logoA,
+            OutputFormat = ImageFormat.Jpeg
+        });
+        Assert(
+            PathsEqual(duplicateOne.OutputPath, Path.Combine(sourceA, "Converted", "logo_1.jpg")) &&
+            PathsEqual(duplicateTwo.OutputPath, Path.Combine(sourceA, "Converted", "logo_2.jpg")),
+            "Conversion duplicate numbering did not use _1 and _2.");
+
+        var singleResize = await resizeService.ResizeAsync(CreatePercentageRequest(logoA, 50));
+        var expectedSingleResize = Path.Combine(sourceA, "Resize", "logo.png");
+        Assert(
+            singleResize.Success && PathsEqual(singleResize.OutputPath, expectedSingleResize),
+            "Single resize did not preserve the filename in the Resize folder.");
+
+        var batchResize = await resizeService.ResizeBatchAsync(
+        [
+            CreatePercentageRequest(wallA, 50),
+            CreatePercentageRequest(logoB, 50)
+        ]);
+        Assert(
+            batchResize.SuccessCount == 2 &&
+            File.Exists(Path.Combine(sourceA, "Resize", "wall.png")) &&
+            File.Exists(Path.Combine(sourceB, "Resize", "logo.png")),
+            "Batch resize did not preserve per-source Resize folder grouping.");
+
+        var resizeDuplicateOne = await resizeService.ResizeAsync(CreatePercentageRequest(logoA, 50));
+        var resizeDuplicateTwo = await resizeService.ResizeAsync(CreatePercentageRequest(logoA, 50));
+        Assert(
+            PathsEqual(resizeDuplicateOne.OutputPath, Path.Combine(sourceA, "Resize", "logo_1.png")) &&
+            PathsEqual(resizeDuplicateTwo.OutputPath, Path.Combine(sourceA, "Resize", "logo_2.png")),
+            "Resize duplicate numbering did not use _1 and _2.");
+
+        foreach (var original in originals)
+        {
+            Assert(original.Value == FileSnapshot.Create(original.Key), $"Original input was modified: {original.Key}");
+        }
+    }
+
+    private static bool PathsEqual(string? left, string right)
+    {
+        return left is not null && string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task VerifyDdsSourceConversionMatrixAsync(
         string ddsInputPath,
         string outputRoot,
@@ -629,11 +766,11 @@ internal static class Program
 
         var conversionInput = Path.Combine(outputRoot, "conversion_input.png");
         WriteFixture(conversionInput, ImageFormat.Png);
-        var conversionOutput = Path.Combine(outputRoot, "conversion_input_converted.jpg");
+        var conversionOutput = Path.Combine(outputRoot, "conversion_input.jpg");
         var protectedBytes = Encoding.UTF8.GetBytes("protected conversion output");
         await File.WriteAllBytesAsync(conversionOutput, protectedBytes);
 
-        await SetOutputPolicyAsync(settingsService, preventOverwrite: true, renameDuplicates: false);
+        await SetOutputPolicyAsync(settingsService, OutputConflictBehavior.SkipExistingFiles);
         var protectedConversion = await AssertNoStagedOutputLeakAsync(
             outputRoot,
             () => conversionService.ConvertAsync(new ImageConversionRequest
@@ -642,12 +779,12 @@ internal static class Program
                 OutputFormat = ImageFormat.Jpeg,
                 OutputFolder = outputRoot
             }));
-        Assert(!protectedConversion.Success, "Protected conversion unexpectedly overwrote an existing output.");
+        Assert(protectedConversion.Skipped, "Skip-existing conversion did not skip an existing output.");
         Assert(
             File.ReadAllBytes(conversionOutput).SequenceEqual(protectedBytes),
             "Protected conversion changed the existing output bytes.");
 
-        await SetOutputPolicyAsync(settingsService, preventOverwrite: false, renameDuplicates: false);
+        await SetOutputPolicyAsync(settingsService, OutputConflictBehavior.OverwriteExistingFiles);
         var overwrittenConversion = await AssertNoStagedOutputLeakAsync(
             outputRoot,
             () => conversionService.ConvertAsync(new ImageConversionRequest
@@ -667,7 +804,7 @@ internal static class Program
             overwrittenInfo.Height == SourceHeight,
             "Overwrite-enabled conversion did not produce a valid JPEG.");
 
-        await SetOutputPolicyAsync(settingsService, preventOverwrite: true, renameDuplicates: true);
+        await SetOutputPolicyAsync(settingsService, OutputConflictBehavior.RenameDuplicatesAutomatically);
         var renamedConversion = await AssertNoStagedOutputLeakAsync(
             outputRoot,
             () => conversionService.ConvertAsync(new ImageConversionRequest
@@ -676,32 +813,38 @@ internal static class Program
                 OutputFormat = ImageFormat.Jpeg,
                 OutputFolder = outputRoot
             }));
-        var expectedRenamedPath = Path.Combine(outputRoot, "conversion_input_converted_2.jpg");
+        var expectedRenamedPath = Path.Combine(outputRoot, "conversion_input_1.jpg");
         Assert(
             renamedConversion.Success &&
             string.Equals(renamedConversion.OutputPath, expectedRenamedPath, StringComparison.OrdinalIgnoreCase) &&
             File.Exists(expectedRenamedPath),
-            "Rename-enabled conversion did not select the _2 output path.");
+            "Rename-enabled conversion did not select the _1 output path.");
 
         var resizeInput = Path.Combine(outputRoot, "resize_input.png");
         WriteFixture(resizeInput, ImageFormat.Png);
-        var resizeOutput = Path.Combine(outputRoot, "resize_input_50pct.png");
+        var resizeOutputRoot = Path.Combine(outputRoot, "ResizeOutput");
+        Directory.CreateDirectory(resizeOutputRoot);
+        var resizeOutput = Path.Combine(resizeOutputRoot, "resize_input.png");
         var protectedResizeBytes = Encoding.UTF8.GetBytes("protected resize output");
         await File.WriteAllBytesAsync(resizeOutput, protectedResizeBytes);
 
-        await SetOutputPolicyAsync(settingsService, preventOverwrite: true, renameDuplicates: false);
+        await SetOutputPolicyAsync(settingsService, OutputConflictBehavior.SkipExistingFiles);
+        var protectedResizeRequest = CreatePercentageRequest(resizeInput, 50);
+        protectedResizeRequest.OutputFolder = resizeOutputRoot;
         var protectedResize = await AssertNoStagedOutputLeakAsync(
             outputRoot,
-            () => resizeService.ResizeAsync(CreatePercentageRequest(resizeInput, 50)));
-        Assert(!protectedResize.Success, "Protected resize unexpectedly overwrote an existing output.");
+            () => resizeService.ResizeAsync(protectedResizeRequest));
+        Assert(protectedResize.Skipped, "Skip-existing resize did not skip an existing output.");
         Assert(
             File.ReadAllBytes(resizeOutput).SequenceEqual(protectedResizeBytes),
             "Protected resize changed the existing output bytes.");
 
-        await SetOutputPolicyAsync(settingsService, preventOverwrite: false, renameDuplicates: false);
+        await SetOutputPolicyAsync(settingsService, OutputConflictBehavior.OverwriteExistingFiles);
+        var overwrittenResizeRequest = CreatePercentageRequest(resizeInput, 50);
+        overwrittenResizeRequest.OutputFolder = resizeOutputRoot;
         var overwrittenResize = await AssertNoStagedOutputLeakAsync(
             outputRoot,
-            () => resizeService.ResizeAsync(CreatePercentageRequest(resizeInput, 50)));
+            () => resizeService.ResizeAsync(overwrittenResizeRequest));
         Assert(
             overwrittenResize.Success &&
             string.Equals(overwrittenResize.OutputPath, resizeOutput, StringComparison.OrdinalIgnoreCase),
@@ -716,20 +859,18 @@ internal static class Program
         Assert(
             GetStagedOutputFiles(outputRoot).Count == 0,
             "Overwrite policy tests left one or more staged output files.");
-        await SetOutputPolicyAsync(settingsService, preventOverwrite: true, renameDuplicates: true);
-        Console.WriteLine("PASS overwrite policy: protect, overwrite, rename, conversion/resize, and staged cleanup verified.");
+        await SetOutputPolicyAsync(settingsService, OutputConflictBehavior.RenameDuplicatesAutomatically);
+        Console.WriteLine("PASS output conflict policy: skip, overwrite, rename, conversion/resize, and staged cleanup verified.");
     }
 
     private static Task SetOutputPolicyAsync(
         ISettingsService settingsService,
-        bool preventOverwrite,
-        bool renameDuplicates)
+        OutputConflictBehavior behavior)
     {
         return settingsService.UpdateAsync(settings =>
         {
             settings.Output.SaveBesideOriginal = true;
-            settings.Output.PreventOverwrite = preventOverwrite;
-            settings.Output.RenameDuplicatesAutomatically = renameDuplicates;
+            settings.Output.ConflictBehavior = behavior;
         });
     }
 
@@ -952,8 +1093,7 @@ internal static class Program
         await settingsService.UpdateAsync(settings =>
         {
             settings.Output.SaveBesideOriginal = true;
-            settings.Output.PreventOverwrite = true;
-            settings.Output.RenameDuplicatesAutomatically = true;
+            settings.Output.ConflictBehavior = OutputConflictBehavior.RenameDuplicatesAutomatically;
             settings.Dds.Compression = compression;
             settings.Dds.GenerateMipmaps = generateMipmaps;
             settings.Dds.PreserveAlpha = preserveAlpha;

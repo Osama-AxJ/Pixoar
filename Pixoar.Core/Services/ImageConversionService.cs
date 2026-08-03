@@ -21,15 +21,22 @@ internal sealed class ImageConversionService(
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(request.InputPath);
             var inputFormat = formatDetector.Detect(request.InputPath);
-            outputPath = outputFileService.CreateOutputPath(new OutputFileRequest
+            var output = outputFileService.CreateOutputPath(new OutputFileRequest
             {
                 SourcePath = request.InputPath,
                 OutputFormat = request.OutputFormat,
                 OperationKind = OutputOperationKind.Convert,
-                OperationSuffix = "converted",
                 OutputFolder = request.OutputFolder
             });
-            var allowOverwrite = AllowsOverwrite(settingsService.Current.Output);
+            outputPath = output.Path;
+            if (output.ShouldSkip)
+            {
+                await logger.LogInformationAsync(
+                    $"Convert skipped because the output already exists. Input: {request.InputPath}. Output: {outputPath}.",
+                    cancellationToken).ConfigureAwait(false);
+                return ImageOperationResult.SkippedExisting(request.InputPath, outputPath);
+            }
+
             using var stagedOutput = new StagedOutputFile(outputPath, logger);
 
             if (inputFormat == ImageFormat.Dds || request.OutputFormat == ImageFormat.Dds)
@@ -50,7 +57,7 @@ internal sealed class ImageConversionService(
 
             stagedOutput.Validate();
             cancellationToken.ThrowIfCancellationRequested();
-            stagedOutput.Commit(allowOverwrite);
+            stagedOutput.Commit(output.AllowOverwrite);
             return ImageOperationResult.Succeeded(request.InputPath, outputPath);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -77,7 +84,8 @@ internal sealed class ImageConversionService(
             var result = await ConvertAsync(request, cancellationToken).ConfigureAwait(false);
             batchResult.Results.Add(result);
 
-            progress?.Report(new ImageOperationProgress(index + 1, requestList.Length, request.InputPath, result.Success ? "Converted" : "Failed"));
+            var status = result.Skipped ? "Skipped" : result.Success ? "Converted" : "Failed";
+            progress?.Report(new ImageOperationProgress(index + 1, requestList.Length, request.InputPath, status));
         }
 
         return batchResult;
@@ -174,11 +182,6 @@ internal sealed class ImageConversionService(
         {
             // Preserve the operation failure; partial-output cleanup is best effort.
         }
-    }
-
-    private static bool AllowsOverwrite(OutputSettings settings)
-    {
-        return !settings.RenameDuplicatesAutomatically && !settings.PreventOverwrite;
     }
 
     private Task LogOperationErrorAsync(

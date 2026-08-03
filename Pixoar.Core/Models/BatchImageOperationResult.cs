@@ -16,6 +16,11 @@ public sealed class BatchImageOperationResult
     public IEnumerable<ImageOperationResult> SuccessfulResults => Results.Where(result => result.Success);
 
     /// <summary>
+    /// Gets inputs skipped because their output files already existed.
+    /// </summary>
+    public IEnumerable<ImageOperationResult> SkippedResults => Results.Where(result => result.Skipped);
+
+    /// <summary>
     /// Gets failed operation errors.
     /// </summary>
     public IEnumerable<ImageOperationError> Errors => Results
@@ -28,7 +33,12 @@ public sealed class BatchImageOperationResult
     public int SuccessCount => Results.Count(result => result.Success);
 
     /// <summary>
+    /// Gets the number of skipped items.
+    /// </summary>
+    public int SkippedCount => Results.Count(result => result.Skipped);
+
+    /// <summary>
     /// Gets the number of failed items.
     /// </summary>
-    public int ErrorCount => Results.Count(result => !result.Success);
+    public int ErrorCount => Results.Count(result => result.Error is not null);
 }

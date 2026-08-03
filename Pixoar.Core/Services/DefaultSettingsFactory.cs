@@ -33,10 +33,26 @@ internal sealed class DefaultSettingsFactory : ISettingsFactory
         settings.ContextMenu ??= defaults.ContextMenu;
         settings.ResizePresets ??= defaults.ResizePresets;
         settings.ConvertPresets ??= defaults.ConvertPresets;
+        NormalizeOutputSettings(settings.Output);
         settings.ResizePresets = NormalizeResizePresets(settings.ResizePresets);
         settings.ConvertPresets = NormalizeConvertPresets(settings.ConvertPresets);
 
         return settings;
+    }
+
+    private static void NormalizeOutputSettings(OutputSettings settings)
+    {
+        if (settings.PreventOverwrite.HasValue || settings.RenameDuplicatesAutomatically.HasValue)
+        {
+            settings.ConflictBehavior = OutputConflictBehavior.RenameDuplicatesAutomatically;
+            settings.PreventOverwrite = null;
+            settings.RenameDuplicatesAutomatically = null;
+        }
+
+        if (!Enum.IsDefined(settings.ConflictBehavior))
+        {
+            settings.ConflictBehavior = OutputConflictBehavior.RenameDuplicatesAutomatically;
+        }
     }
 
     private static List<ResizePreset> NormalizeResizePresets(IEnumerable<ResizePreset?> presets)

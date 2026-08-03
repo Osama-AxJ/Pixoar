@@ -58,8 +58,7 @@ static async Task RunAsync(string runRoot)
         current.Dds.Compression = DdsCompressionMode.Uncompressed;
         current.Dds.GenerateMipmaps = false;
         current.Dds.PreserveAlpha = true;
-        current.Output.PreventOverwrite = true;
-        current.Output.RenameDuplicatesAutomatically = true;
+        current.Output.ConflictBehavior = OutputConflictBehavior.RenameDuplicatesAutomatically;
     });
 
     var conversion = provider.GetRequiredService<IImageConversionService>();

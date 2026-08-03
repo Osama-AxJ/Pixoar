@@ -11,6 +11,11 @@ public sealed class ImageOperationResult
     public bool Success { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the operation was skipped because its output exists.
+    /// </summary>
+    public bool Skipped { get; set; }
+
+    /// <summary>
     /// Gets or sets the input file path.
     /// </summary>
     public string InputPath { get; set; } = string.Empty;
@@ -36,6 +41,22 @@ public sealed class ImageOperationResult
         return new ImageOperationResult
         {
             Success = true,
+            InputPath = inputPath,
+            OutputPath = outputPath
+        };
+    }
+
+    /// <summary>
+    /// Creates a result for an input skipped because its output already exists.
+    /// </summary>
+    /// <param name="inputPath">The input path.</param>
+    /// <param name="outputPath">The existing output path.</param>
+    /// <returns>The skipped result.</returns>
+    public static ImageOperationResult SkippedExisting(string inputPath, string outputPath)
+    {
+        return new ImageOperationResult
+        {
+            Skipped = true,
             InputPath = inputPath,
             OutputPath = outputPath
         };

@@ -33,17 +33,24 @@ internal sealed class ImageResizeService(
                 originalDimensions.Height,
                 request);
 
-            outputPath = outputFileService.CreateOutputPath(new OutputFileRequest
+            var output = outputFileService.CreateOutputPath(new OutputFileRequest
             {
                 SourcePath = request.InputPath,
                 OutputFormat = outputFormat,
                 OperationKind = OutputOperationKind.Resize,
-                OperationSuffix = BuildResizeSuffix(request),
                 OutputFolder = request.OutputFolder
             });
+            outputPath = output.Path;
+
+            if (output.ShouldSkip)
+            {
+                await logger.LogInformationAsync(
+                    $"Resize skipped because the output already exists. Input: {request.InputPath}. Output: {outputPath}.",
+                    cancellationToken).ConfigureAwait(false);
+                return ImageOperationResult.SkippedExisting(request.InputPath, outputPath);
+            }
 
             EnsureOutputDoesNotReplaceInput(request.InputPath, outputPath);
-            var allowOverwrite = AllowsOverwrite(settingsService.Current.Output);
             using var stagedOutput = new StagedOutputFile(outputPath, logger);
             await LogResizePlanAsync(
                 operationId,
@@ -89,7 +96,7 @@ internal sealed class ImageResizeService(
                 actualDimensions,
                 cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            stagedOutput.Commit(allowOverwrite);
+            stagedOutput.Commit(output.AllowOverwrite);
             await logger.LogInformationAsync(
                 $"Resize [{operationId}] completed. Final output path: {outputPath}. Validated dimensions: {actualDimensions}.",
                 CancellationToken.None).ConfigureAwait(false);
@@ -129,7 +136,8 @@ internal sealed class ImageResizeService(
             var result = await ResizeAsync(request, cancellationToken).ConfigureAwait(false);
             batchResult.Results.Add(result);
 
-            progress?.Report(new ImageOperationProgress(index + 1, requestList.Length, request.InputPath, result.Success ? "Resized" : "Failed"));
+            var status = result.Skipped ? "Skipped" : result.Success ? "Resized" : "Failed";
+            progress?.Report(new ImageOperationProgress(index + 1, requestList.Length, request.InputPath, status));
         }
 
         return batchResult;
@@ -200,11 +208,6 @@ internal sealed class ImageResizeService(
         return Task.Run(
             () => ResizeWithMagick(inputPath, outputPath, outputFormat, request, targetDimensions),
             cancellationToken);
-    }
-
-    private static bool AllowsOverwrite(OutputSettings settings)
-    {
-        return !settings.RenameDuplicatesAutomatically && !settings.PreventOverwrite;
     }
 
     private ImageDimensions ResizeWithMagick(
@@ -285,31 +288,6 @@ internal sealed class ImageResizeService(
         }
 
         image.Resize(new MagickGeometry(width, height));
-    }
-
-    private static string BuildResizeSuffix(ImageResizeRequest request)
-    {
-        if (IsPercentageResize(request))
-        {
-            return $"{request.Percentage.GetValueOrDefault()}pct";
-        }
-
-        if (request.Width is > 0 && request.Height is > 0)
-        {
-            return $"{request.Width.Value}x{request.Height.Value}";
-        }
-
-        if (request.Width is > 0)
-        {
-            return $"{request.Width.Value}w";
-        }
-
-        if (request.Height is > 0)
-        {
-            return $"{request.Height.Value}h";
-        }
-
-        return "resized";
     }
 
     private static void NormalizeResizeRequest(ImageResizeRequest request)

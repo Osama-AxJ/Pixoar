@@ -642,9 +642,9 @@ public sealed class MainViewModel : ViewModelBase
                 await AddOutputFilesAsync(result.SuccessfulResults.Select(success => success.OutputPath));
             }
 
-            StatusText = result.ErrorCount == 0
+            StatusText = result.SkippedCount == 0 && result.ErrorCount == 0
                 ? $"Completed {result.SuccessCount} {completionNoun}{(result.SuccessCount == 1 ? string.Empty : "s")}."
-                : $"Completed with {result.SuccessCount} success{(result.SuccessCount == 1 ? string.Empty : "es")} and {result.ErrorCount} error{(result.ErrorCount == 1 ? string.Empty : "s")}.";
+                : $"Completed with {result.SuccessCount} success{(result.SuccessCount == 1 ? string.Empty : "es")}, {result.SkippedCount} skipped, and {result.ErrorCount} error{(result.ErrorCount == 1 ? string.Empty : "s")}.";
         }
         catch (Exception)
         {
@@ -830,8 +830,8 @@ public sealed class MainViewModel : ViewModelBase
 
     private bool RequiresOverwriteConfirmation()
     {
-        var output = _settingsService.Current.Output;
-        return !output.PreventOverwrite && !output.RenameDuplicatesAutomatically;
+        return _settingsService.Current.Output.ConflictBehavior ==
+            OutputConflictBehavior.OverwriteExistingFiles;
     }
 
     private static ImageFileItem CreateImageItem(string path)

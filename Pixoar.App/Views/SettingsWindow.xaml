@@ -123,10 +123,23 @@
                             <StackPanel Grid.Row="3"
                                         Grid.ColumnSpan="3"
                                         Margin="0,18,0,0">
-                                <CheckBox Content="Prevent overwrite"
-                                          IsChecked="{Binding PreventOverwrite}" />
-                                <CheckBox Content="Rename duplicates automatically"
-                                          IsChecked="{Binding RenameDuplicates}" />
+                                <TextBlock Text="Output Conflict Behavior"
+                                           Style="{StaticResource LabelTextBlockStyle}" />
+                                <RadioButton Content="Rename duplicates automatically"
+                                             GroupName="OutputConflictBehavior"
+                                             IsChecked="{Binding SelectedOutputConflictBehavior, Mode=TwoWay, Converter={StaticResource StringEqualsConverter}, ConverterParameter=Rename duplicates automatically}" />
+                                <RadioButton Content="Skip existing files"
+                                             GroupName="OutputConflictBehavior"
+                                             IsChecked="{Binding SelectedOutputConflictBehavior, Mode=TwoWay, Converter={StaticResource StringEqualsConverter}, ConverterParameter=Skip existing files}" />
+                                <RadioButton Content="Overwrite existing files"
+                                             GroupName="OutputConflictBehavior"
+                                             IsChecked="{Binding SelectedOutputConflictBehavior, Mode=TwoWay, Converter={StaticResource StringEqualsConverter}, ConverterParameter=Overwrite existing files}" />
+
+                                <CheckBox Margin="0,18,0,0"
+                                          Content="Save converted files in a &quot;Converted&quot; folder"
+                                          IsChecked="{Binding SaveConvertedFilesInConvertedFolder}" />
+                                <CheckBox Content="Save resized files in a &quot;Resize&quot; folder"
+                                          IsChecked="{Binding SaveResizedFilesInResizeFolder}" />
                             </StackPanel>
                         </Grid>
                     </Border>

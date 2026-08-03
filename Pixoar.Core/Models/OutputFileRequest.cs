@@ -21,11 +21,6 @@ public sealed class OutputFileRequest
     public OutputOperationKind OperationKind { get; set; }
 
     /// <summary>
-    /// Gets or sets the operation suffix.
-    /// </summary>
-    public string OperationSuffix { get; set; } = string.Empty;
-
-    /// <summary>
     /// Gets or sets an optional output folder override.
     /// </summary>
     public string? OutputFolder { get; set; }

@@ -10,12 +10,18 @@ internal static class CommandResultFormatter
         {
             $"{operationName} summary:",
             $"  Successful: {result.SuccessCount}",
+            $"  Skipped:    {result.SkippedCount}",
             $"  Failed:     {result.ErrorCount}"
         };
 
         foreach (var successful in result.SuccessfulResults)
         {
             lines.Add($"  OK: {successful.InputPath} -> {successful.OutputPath}");
+        }
+
+        foreach (var skipped in result.SkippedResults)
+        {
+            lines.Add($"  SKIPPED: {skipped.InputPath} -> {skipped.OutputPath}");
         }
 
         foreach (var error in result.Errors)
@@ -34,6 +40,8 @@ internal static class CommandResultFormatter
             return CliExitCodes.Success;
         }
 
-        return result.SuccessCount > 0 ? CliExitCodes.PartialSuccess : CliExitCodes.Failure;
+        return result.SuccessCount > 0 || result.SkippedCount > 0
+            ? CliExitCodes.PartialSuccess
+            : CliExitCodes.Failure;
     }
 }
