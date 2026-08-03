@@ -204,7 +204,7 @@ public sealed class SettingsViewModel : ViewModelBase
     /// <summary>
     /// Gets the application version text.
     /// </summary>
-    public string VersionText => "0.1.0";
+    public string VersionText => "0.2.0";
 
     /// <summary>
     /// Gets the license text.

@@ -11,14 +11,15 @@ $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repositoryRoot = Resolve-Path (Join-Path $scriptDirectory "..")
 $artifactsDirectory = Join-Path $repositoryRoot "artifacts"
 $distDirectory = Join-Path $artifactsDirectory "dist"
-$installDirectory = Join-Path $distDirectory "Pixoar"
+$publishDirectory = Join-Path $artifactsDirectory "publish"
+$installDirectory = Join-Path $publishDirectory "Pixoar"
 $projectPath = Join-Path $repositoryRoot "Pixoar.App\Pixoar.App.csproj"
 $propsPath = Join-Path $repositoryRoot "Directory.Build.props"
 
 [xml]$props = Get-Content -LiteralPath $propsPath
 $version = $props.Project.PropertyGroup.Version
 if ([string]::IsNullOrWhiteSpace($version)) {
-    $version = "0.1.0"
+    $version = "0.2.0"
 }
 
 $resolvedArtifacts = [System.IO.Path]::GetFullPath($artifactsDirectory)
@@ -32,6 +33,7 @@ if (Test-Path -LiteralPath $resolvedInstall) {
 }
 
 New-Item -ItemType Directory -Path $resolvedInstall | Out-Null
+New-Item -ItemType Directory -Path $distDirectory -Force | Out-Null
 
 dotnet restore (Join-Path $repositoryRoot "Pixoar.sln")
 

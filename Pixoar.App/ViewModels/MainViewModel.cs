@@ -1053,6 +1053,6 @@ public sealed class MainViewModel : ViewModelBase
 
     private static string GetVersionText()
     {
-        return Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
+        return Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.2.0";
     }
 }

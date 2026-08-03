@@ -18,7 +18,7 @@ internal sealed class SettingsCommand(IDdsDependencyService ddsDependencyService
     public Task<CommandResult> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var settings = context.SettingsService.Current;
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.2.0";
         var resolvedTexconvPath = ddsDependencyService.ResolveTexconvPath();
         var texconvStatus = resolvedTexconvPath is null ? "Not found" : resolvedTexconvPath;
         var enabledResizePresets = settings.ResizePresets

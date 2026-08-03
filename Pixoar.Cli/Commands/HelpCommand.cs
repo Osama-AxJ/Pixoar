@@ -19,7 +19,7 @@ internal sealed class HelpCommand : ICommand
 
     public Task<CommandResult> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.2.0";
         var message = $"""
         Pixoar CLI {version}
 
