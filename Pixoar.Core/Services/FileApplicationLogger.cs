@@ -41,6 +41,7 @@ internal sealed class FileApplicationLogger(IApplicationPathProvider pathProvide
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await using var crossProcessLock = await AcquireCrossProcessLockAsync(cancellationToken).ConfigureAwait(false);
             await File.AppendAllTextAsync(
                 logFile,
                 line + Environment.NewLine,
@@ -50,5 +51,35 @@ internal sealed class FileApplicationLogger(IApplicationPathProvider pathProvide
         {
             _writeLock.Release();
         }
+    }
+
+    private async Task<FileStream> AcquireCrossProcessLockAsync(CancellationToken cancellationToken)
+    {
+        var lockFilePath = Path.Combine(pathProvider.LogsDirectory, ".write.lock");
+        const int maxAttempts = 200;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                return new FileStream(
+                    lockFilePath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.Asynchronous);
+            }
+            catch (Exception ex) when (
+                (ex is IOException or UnauthorizedAccessException) &&
+                attempt < maxAttempts)
+            {
+                await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw new IOException("Pixoar could not acquire the cross-process log lock.");
     }
 }

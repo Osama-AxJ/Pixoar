@@ -26,6 +26,13 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        if (ExplorerBatchDispatcher.IsRequest(e.Args))
+        {
+            var exitCode = await ExplorerBatchDispatcher.DispatchAsync(e.Args);
+            Shutdown(exitCode);
+            return;
+        }
+
         var services = new ServiceCollection();
         ConfigureServices(services);
         _serviceProvider = services.BuildServiceProvider();

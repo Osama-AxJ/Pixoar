@@ -65,7 +65,11 @@ internal sealed class ConvertCommand(
             return CommandResult.Failure(message, CliExitCodes.MissingDependency);
         }
 
-        Console.WriteLine($"Converting {inputPaths.Count} image{(inputPaths.Count == 1 ? string.Empty : "s")} to {formatDetector.GetDisplayName(outputFormat)}...");
+        var quiet = options.HasOption("quiet");
+        if (!quiet)
+        {
+            Console.WriteLine($"Converting {inputPaths.Count} image{(inputPaths.Count == 1 ? string.Empty : "s")} to {formatDetector.GetDisplayName(outputFormat)}...");
+        }
 
         var requests = inputPaths.Select(path => new ImageConversionRequest
         {
@@ -74,12 +78,19 @@ internal sealed class ConvertCommand(
             OutputFolder = options.GetOption("output")
         });
 
-        var progress = new Progress<ImageOperationProgress>(value =>
-        {
-            Console.WriteLine($"[{value.Completed}/{value.Total}] {value.Status}: {Path.GetFileName(value.CurrentFile)}");
-        });
+        var progress = quiet
+            ? null
+            : new Progress<ImageOperationProgress>(value =>
+            {
+                Console.WriteLine($"[{value.Completed}/{value.Total}] {value.Status}: {Path.GetFileName(value.CurrentFile)}");
+            });
 
         var result = await conversionService.ConvertBatchAsync(requests, progress, cancellationToken);
+        if (quiet && result.ErrorCount == 0)
+        {
+            return new CommandResult(CommandResultFormatter.ExitCodeFor(result));
+        }
+
         return new CommandResult(
             CommandResultFormatter.ExitCodeFor(result),
             CommandResultFormatter.FormatBatchSummary("Convert", result));

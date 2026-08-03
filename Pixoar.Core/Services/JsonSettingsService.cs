@@ -27,6 +27,7 @@ internal sealed class JsonSettingsService(
         try
         {
             Directory.CreateDirectory(pathProvider.AppDataDirectory);
+            await using var crossProcessLock = await AcquireCrossProcessLockAsync(cancellationToken).ConfigureAwait(false);
 
             if (!File.Exists(pathProvider.SettingsFilePath))
             {
@@ -48,8 +49,17 @@ internal sealed class JsonSettingsService(
                         cancellationToken).ConfigureAwait(false);
                 }
 
+                var beforeNormalization = JsonSerializer.Serialize(settings, SerializerOptions);
                 _current = settingsFactory.Normalize(settings);
-                await SaveUnlockedAsync(cancellationToken).ConfigureAwait(false);
+                var afterNormalization = JsonSerializer.Serialize(_current, SerializerOptions);
+                if (!string.Equals(beforeNormalization, afterNormalization, StringComparison.Ordinal))
+                {
+                    await SaveUnlockedAsync(cancellationToken).ConfigureAwait(false);
+                    await logger.LogInformationAsync(
+                        "Saved normalized settings because the loaded data changed.",
+                        cancellationToken).ConfigureAwait(false);
+                }
+
                 return _current;
             }
             catch (JsonException ex)
@@ -77,6 +87,8 @@ internal sealed class JsonSettingsService(
         await _settingsLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            Directory.CreateDirectory(pathProvider.AppDataDirectory);
+            await using var crossProcessLock = await AcquireCrossProcessLockAsync(cancellationToken).ConfigureAwait(false);
             update(Current);
             _current = settingsFactory.Normalize(Current);
             await SaveUnlockedAsync(cancellationToken).ConfigureAwait(false);
@@ -125,6 +137,36 @@ internal sealed class JsonSettingsService(
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task<FileStream> AcquireCrossProcessLockAsync(CancellationToken cancellationToken)
+    {
+        var lockFilePath = $"{pathProvider.SettingsFilePath}.lock";
+        const int maxAttempts = 100;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                return new FileStream(
+                    lockFilePath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.Asynchronous);
+            }
+            catch (Exception ex) when (
+                (ex is IOException or UnauthorizedAccessException) &&
+                attempt < maxAttempts)
+            {
+                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw new IOException("Pixoar could not acquire the cross-process settings lock.");
+    }
+
     private async Task<FileStream> OpenSettingsReadStreamAsync(CancellationToken cancellationToken)
     {
         FileStream? stream = null;
@@ -154,7 +196,9 @@ internal sealed class JsonSettingsService(
                 await operation().ConfigureAwait(false);
                 return;
             }
-            catch (IOException) when (attempt < maxAttempts)
+            catch (Exception ex) when (
+                (ex is IOException or UnauthorizedAccessException) &&
+                attempt < maxAttempts)
             {
                 await Task.Delay(75 * attempt, cancellationToken).ConfigureAwait(false);
             }
