@@ -43,6 +43,14 @@
                             <TextBlock Text="Add Folder" />
                         </StackPanel>
                     </Button>
+                    <Button Click="SelectAll_Click"
+                            IsEnabled="{Binding HasItems, ElementName=ImageList}"
+                            Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE762;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,7,0" />
+                            <TextBlock Text="Select All" />
+                        </StackPanel>
+                    </Button>
                     <Button Command="{Binding RemoveSelectedCommand}"
                             Style="{StaticResource ToolbarButtonStyle}">
                         <StackPanel Orientation="Horizontal">
@@ -93,7 +101,8 @@
                                Style="{StaticResource MutedTextBlockStyle}" />
                 </DockPanel>
 
-                <ListView Grid.Row="1"
+                <ListView x:Name="ImageList"
+                          Grid.Row="1"
                           ItemsSource="{Binding Images}"
                           SelectedItem="{Binding SelectedImage, Mode=TwoWay}"
                           SelectionMode="Extended"

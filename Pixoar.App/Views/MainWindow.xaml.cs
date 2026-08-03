@@ -17,4 +17,10 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
     }
+
+    private void SelectAll_Click(object sender, RoutedEventArgs e)
+    {
+        ImageList.SelectAll();
+        ImageList.Focus();
+    }
 }

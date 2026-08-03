@@ -659,7 +659,6 @@ public sealed class MainViewModel : ViewModelBase
 
     private void OnSelectedImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        SelectedImage = SelectedImages.LastOrDefault();
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(SelectedCount));
         RefreshResizeState();

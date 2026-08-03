@@ -49,13 +49,11 @@ public static class ListViewSelectionBehavior
 
         listView.SelectionChanged -= OnSelectionChanged;
         listView.PreviewKeyDown -= OnPreviewKeyDown;
-        listView.PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDown;
 
         if (e.NewValue is not null)
         {
             listView.SelectionChanged += OnSelectionChanged;
             listView.PreviewKeyDown += OnPreviewKeyDown;
-            listView.PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
         }
     }
 
@@ -100,36 +98,4 @@ public static class ListViewSelectionBehavior
         }
     }
 
-    private static void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is not DependencyObject source)
-        {
-            return;
-        }
-
-        var row = FindAncestor<ListViewItem>(source);
-        if (row is null || row.IsKeyboardFocusWithin)
-        {
-            return;
-        }
-
-        row.Focus();
-    }
-
-    private static T? FindAncestor<T>(DependencyObject source)
-        where T : DependencyObject
-    {
-        var current = source;
-        while (current is not null)
-        {
-            if (current is T match)
-            {
-                return match;
-            }
-
-            current = System.Windows.Media.VisualTreeHelper.GetParent(current);
-        }
-
-        return null;
-    }
 }
