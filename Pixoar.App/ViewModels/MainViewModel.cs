@@ -84,7 +84,9 @@ public sealed class MainViewModel : ViewModelBase
         AddImagesCommand = new AsyncRelayCommand(_ => AddImagesAsync(), _ => !IsBusy);
         AddFolderCommand = new AsyncRelayCommand(_ => AddFolderAsync(), _ => !IsBusy);
         RemoveSelectedCommand = new RelayCommand(_ => RemoveSelected(), _ => HasSelection && !IsBusy);
-        ClearListCommand = new RelayCommand(_ => ClearList(), _ => Images.Count > 0 && !IsBusy);
+        ClearListCommand = new RelayCommand(
+            _ => ClearList(),
+            _ => (Images.Count > 0 || ProcessedImages.Count > 0) && !IsBusy);
         OpenSettingsCommand = new RelayCommand(_ => OpenSettings(), _ => !IsBusy);
         ShowImageInformationCommand = new AsyncRelayCommand(_ => ShowImageInformationAsync(), _ => SelectedImage is not null && !IsBusy);
         DropFilesCommand = new AsyncRelayCommand(AddDroppedPathsAsync, _ => !IsBusy);

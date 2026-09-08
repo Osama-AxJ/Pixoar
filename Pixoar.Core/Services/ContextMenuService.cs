@@ -79,7 +79,6 @@ internal sealed class ContextMenuService(
 
             var executablePaths = ResolveExecutablePaths();
             var texconvPath = ddsDependencyService.ResolveTexconvPath();
-            var expectedMenuKey = CreateExpectedMenuKey(settings, executablePaths);
             var writtenCommands = new List<string>();
 
             await logger.LogInformationAsync($"Context menu resolved app path: {executablePaths.AppPath}", cancellationToken).ConfigureAwait(false);
@@ -104,6 +103,7 @@ internal sealed class ContextMenuService(
                         cancellationToken).ConfigureAwait(false);
                 }
 
+                var expectedMenuKey = CreateExpectedMenuKey(settings, executablePaths, extension);
                 writtenCommands.AddRange(InstallForExtension(extension, expectedMenuKey));
                 await logger.LogInformationAsync(
                     $@"Registry key created: HKEY_CURRENT_USER\{GetMenuKeyPath(extension)}",
@@ -242,7 +242,6 @@ internal sealed class ContextMenuService(
         {
             var settings = settingsService.Current;
             var executablePaths = CreateInstalledExecutablePaths();
-            var expectedMenuKey = CreateExpectedMenuKey(settings, executablePaths);
             var installedExtensions = new List<string>();
             var issues = new List<string>();
             using var sharedMenuKey = Registry.CurrentUser.OpenSubKey(
@@ -264,7 +263,7 @@ internal sealed class ContextMenuService(
                 {
                     ValidateRegistryKey(
                         menuKey,
-                        expectedMenuKey,
+                        CreateExpectedMenuKey(settings, executablePaths, extension),
                         $@"HKEY_CURRENT_USER\{menuKeyPath}",
                         issues);
                 }
@@ -390,7 +389,8 @@ internal sealed class ContextMenuService(
 
     private static ExpectedRegistryKey CreateExpectedMenuKey(
         PixoarSettings settings,
-        ContextMenuExecutablePaths executablePaths)
+        ContextMenuExecutablePaths executablePaths,
+        string extension)
     {
         var menuKey = CreateExpectedSubmenu("Pixoar", executablePaths.ContextMenuIconPath);
         var menuShellKey = menuKey.AddSubKey("shell");

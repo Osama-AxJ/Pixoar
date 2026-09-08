@@ -121,7 +121,7 @@
 
                             <TextBlock Grid.ColumnSpan="3"
                                        Text="Explorer Output"
-                                       ToolTip="Desktop Convert and Resize use the Export button after processing."
+                                       ToolTip="Desktop operations use the Export button after processing."
                                        Style="{StaticResource SectionTitleTextBlockStyle}" />
 
                             <CheckBox Grid.Row="1"
