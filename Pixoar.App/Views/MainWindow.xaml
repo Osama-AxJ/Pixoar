@@ -100,10 +100,18 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Header="File Name" Width="260" DisplayMemberBinding="{Binding FileName}" />
-                                <GridViewColumn Header="Resolution" Width="145" DisplayMemberBinding="{Binding Resolution}" />
-                                <GridViewColumn Header="Format" Width="82" DisplayMemberBinding="{Binding Format}" />
-                                <GridViewColumn Header="Size" Width="100" DisplayMemberBinding="{Binding FileSize}" />
+                                <GridViewColumn Width="260" DisplayMemberBinding="{Binding FileName}">
+                                    <GridViewColumn.Header><Button Background="Transparent" BorderThickness="0" Padding="2,0" Cursor="Hand" Command="{Binding DataContext.SortImagesCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="FileName" Content="{Binding DataContext.FileNameSortHeader, RelativeSource={RelativeSource AncestorType=ListView}}" /></GridViewColumn.Header>
+                                </GridViewColumn>
+                                <GridViewColumn Width="145" DisplayMemberBinding="{Binding Resolution}">
+                                    <GridViewColumn.Header><Button Background="Transparent" BorderThickness="0" Padding="2,0" Cursor="Hand" Command="{Binding DataContext.SortImagesCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="Resolution" Content="{Binding DataContext.ResolutionSortHeader, RelativeSource={RelativeSource AncestorType=ListView}}" /></GridViewColumn.Header>
+                                </GridViewColumn>
+                                <GridViewColumn Width="82" DisplayMemberBinding="{Binding Format}">
+                                    <GridViewColumn.Header><Button Background="Transparent" BorderThickness="0" Padding="2,0" Cursor="Hand" Command="{Binding DataContext.SortImagesCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="Format" Content="{Binding DataContext.FormatSortHeader, RelativeSource={RelativeSource AncestorType=ListView}}" /></GridViewColumn.Header>
+                                </GridViewColumn>
+                                <GridViewColumn Width="100" DisplayMemberBinding="{Binding FileSize}">
+                                    <GridViewColumn.Header><Button Background="Transparent" BorderThickness="0" Padding="2,0" Cursor="Hand" Command="{Binding DataContext.SortImagesCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="Size" Content="{Binding DataContext.SizeSortHeader, RelativeSource={RelativeSource AncestorType=ListView}}" /></GridViewColumn.Header>
+                                </GridViewColumn>
                             </GridView>
                         </ListView.View>
                     </ListView>

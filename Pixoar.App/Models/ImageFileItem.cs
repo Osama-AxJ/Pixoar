@@ -25,6 +25,31 @@ public sealed class ImageFileItem : ViewModelBase
     public string FileName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the source image width used for numeric sorting.
+    /// </summary>
+    public int PixelWidth { get; set; }
+
+    /// <summary>
+    /// Gets or sets the source image height used for numeric sorting.
+    /// </summary>
+    public int PixelHeight { get; set; }
+
+    /// <summary>
+    /// Gets the source pixel area used for numeric resolution sorting.
+    /// </summary>
+    public long PixelArea => (long)PixelWidth * PixelHeight;
+
+    /// <summary>
+    /// Gets or sets the file size in bytes used for numeric sorting.
+    /// </summary>
+    public long FileSizeBytes { get; set; }
+
+    /// <summary>
+    /// Gets or sets a normalized format value used for case-insensitive sorting.
+    /// </summary>
+    public string NormalizedFormat { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the placeholder image resolution text.
     /// </summary>
     public string Resolution

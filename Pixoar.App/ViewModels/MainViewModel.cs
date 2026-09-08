@@ -49,6 +49,8 @@ public sealed class MainViewModel : ViewModelBase
     private bool _isUpdatingLinkedDimension;
     private bool _isProcessedListActive;
     private int _previewLoadVersion;
+    private ImageListSortColumn? _activeImageSortColumn;
+    private bool _isImageSortAscending = true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
@@ -95,6 +97,7 @@ public sealed class MainViewModel : ViewModelBase
         ExportCommand = new AsyncRelayCommand(_ => ExportPendingAsync(), _ => CanExport);
         ShowSourceImagesCommand = new RelayCommand(_ => ShowSourceImages(), _ => !IsBusy);
         ShowProcessedImagesCommand = new RelayCommand(_ => ShowProcessedImages(), _ => !IsBusy);
+        SortImagesCommand = new RelayCommand(parameter => SortImages(parameter as string), _ => !IsBusy);
 
         SelectedImages.CollectionChanged += OnSelectedImagesChanged;
         Images.CollectionChanged += OnImagesChanged;
@@ -217,6 +220,11 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand ShowProcessedImagesCommand { get; }
 
     /// <summary>
+    /// Gets the command that sorts the active image list by a column header.
+    /// </summary>
+    public RelayCommand SortImagesCommand { get; }
+
+    /// <summary>
     /// Gets a value indicating whether the processed-images view is active.
     /// </summary>
     public bool IsProcessedListActive => _isProcessedListActive;
@@ -236,6 +244,26 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets the number of images in the active list.
     /// </summary>
     public int ActiveListCount => DisplayedImages.Count;
+
+    /// <summary>
+    /// Gets the File Name column label and its current sort indicator.
+    /// </summary>
+    public string FileNameSortHeader => GetSortHeader("File Name", ImageListSortColumn.FileName);
+
+    /// <summary>
+    /// Gets the Resolution column label and its current sort indicator.
+    /// </summary>
+    public string ResolutionSortHeader => GetSortHeader("Resolution", ImageListSortColumn.Resolution);
+
+    /// <summary>
+    /// Gets the Format column label and its current sort indicator.
+    /// </summary>
+    public string FormatSortHeader => GetSortHeader("Format", ImageListSortColumn.Format);
+
+    /// <summary>
+    /// Gets the Size column label and its current sort indicator.
+    /// </summary>
+    public string SizeSortHeader => GetSortHeader("Size", ImageListSortColumn.Size);
 
     /// <summary>
     /// Gets or sets the selected image displayed in the preview panel.
@@ -610,6 +638,10 @@ public sealed class MainViewModel : ViewModelBase
             item.Format = info.FormatDisplayName;
             item.Resolution = info.Width > 0 && info.Height > 0 ? $"{info.Width}x{info.Height}" : "Unknown";
             item.FileSize = info.FileSize;
+            item.PixelWidth = info.Width;
+            item.PixelHeight = info.Height;
+            item.FileSizeBytes = info.FileSizeBytes;
+            item.NormalizedFormat = info.FormatDisplayName.Trim().ToUpperInvariant();
             item.IsDds = info.Format == ImageFormat.Dds;
             item.ThumbnailGlyph = item.IsDds ? "\uE8A5" : "\uE91B";
             item.PreviewGlyph = item.IsDds ? "\uE8A5" : "\uE91B";
@@ -621,6 +653,8 @@ public sealed class MainViewModel : ViewModelBase
             {
                 AddError($"{item.FileName}: {thumbnail.Message}");
             }
+
+            ApplyActiveImageSort();
         }
         catch (Exception)
         {
@@ -669,7 +703,10 @@ public sealed class MainViewModel : ViewModelBase
     private void OpenSettings()
     {
         var previousDefault = FormatDdsCompression(_settingsService.Current.Dds.Compression);
-        _windowService.ShowSettingsWindow();
+        var settingsImages = SelectedImages.Count > 0
+            ? SelectedImages.ToArray()
+            : DisplayedImages.ToArray();
+        _windowService.ShowSettingsWindow(settingsImages);
 
         if (string.Equals(
             SelectedDdsCompression,
@@ -826,6 +863,7 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(DisplayedImages));
         OnPropertyChanged(nameof(ActiveListCount));
         OnPropertyChanged(nameof(ActiveListTitle));
+        ApplyActiveImageSort();
         RefreshCommandStates();
     }
 
@@ -1065,6 +1103,79 @@ public sealed class MainViewModel : ViewModelBase
         RefreshCommandStates();
     }
 
+    private void SortImages(string? columnName)
+    {
+        if (!Enum.TryParse<ImageListSortColumn>(columnName, ignoreCase: true, out var column))
+        {
+            return;
+        }
+
+        if (_activeImageSortColumn == column)
+        {
+            _isImageSortAscending = !_isImageSortAscending;
+        }
+        else
+        {
+            _activeImageSortColumn = column;
+            _isImageSortAscending = true;
+        }
+
+        ApplyActiveImageSort();
+        OnPropertyChanged(nameof(FileNameSortHeader));
+        OnPropertyChanged(nameof(ResolutionSortHeader));
+        OnPropertyChanged(nameof(FormatSortHeader));
+        OnPropertyChanged(nameof(SizeSortHeader));
+    }
+
+    private void ApplyActiveImageSort()
+    {
+        if (_activeImageSortColumn is not { } column)
+        {
+            return;
+        }
+
+        var images = DisplayedImages;
+        var selected = SelectedImages.ToHashSet();
+        var previouslySelectedImage = SelectedImage;
+        var sortedImages = ImageListSorter.Sort(images, column, _isImageSortAscending);
+        if (images.SequenceEqual(sortedImages))
+        {
+            return;
+        }
+
+        for (var index = 0; index < sortedImages.Count; index++)
+        {
+            var currentIndex = images.IndexOf(sortedImages[index]);
+            if (currentIndex != index)
+            {
+                images.Move(currentIndex, index);
+            }
+        }
+
+        foreach (var selectedImage in selected)
+        {
+            if (!SelectedImages.Contains(selectedImage))
+            {
+                SelectedImages.Add(selectedImage);
+            }
+        }
+
+        if (previouslySelectedImage is not null && !ReferenceEquals(SelectedImage, previouslySelectedImage))
+        {
+            SelectedImage = previouslySelectedImage;
+        }
+    }
+
+    private string GetSortHeader(string label, ImageListSortColumn column)
+    {
+        if (_activeImageSortColumn != column)
+        {
+            return label;
+        }
+
+        return $"{label} {(_isImageSortAscending ? "↑" : "↓")}";
+    }
+
     private void ClearErrors()
     {
         Errors.Clear();
@@ -1208,7 +1319,9 @@ public sealed class MainViewModel : ViewModelBase
             FilePath = path,
             FileName = file.Name,
             Format = format,
+            NormalizedFormat = format,
             FileSize = FormatFileSize(file.Exists ? file.Length : 0),
+            FileSizeBytes = file.Exists ? file.Length : 0,
             Resolution = "Loading...",
             IsDds = isDds,
             ThumbnailGlyph = isDds ? "\uE8A5" : "\uE91B",

@@ -215,6 +215,51 @@
                                         Margin="0,20,0,0">
                                 <CheckBox Content="Generate mipmaps"
                                           IsChecked="{Binding GenerateMipmaps}" />
+                                <Grid Margin="26,10,0,10"
+                                      IsEnabled="{Binding GenerateMipmaps}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="220" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Text="Mip level mode"
+                                               Style="{StaticResource LabelTextBlockStyle}"
+                                               VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1"
+                                              ItemsSource="{Binding MipmapModeOptions}"
+                                              SelectedItem="{Binding SelectedMipmapMode}" />
+
+                                    <TextBlock Grid.Row="1"
+                                               Text="Stop at"
+                                               Style="{StaticResource LabelTextBlockStyle}"
+                                               VerticalAlignment="Center"
+                                               Visibility="{Binding IsCustomMipSizeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <ComboBox Grid.Row="1"
+                                              Grid.Column="1"
+                                              Margin="0,8,0,0"
+                                              ItemsSource="{Binding SmallestMipSizeOptions}"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="Size"
+                                              SelectedValue="{Binding SelectedSmallestMipSize}"
+                                              MaxDropDownHeight="238"
+                                              Visibility="{Binding IsCustomMipSizeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                                    <TextBlock Grid.Row="2"
+                                               Margin="0,8,0,0"
+                                               Text="Mipmap filter"
+                                               Style="{StaticResource LabelTextBlockStyle}"
+                                               VerticalAlignment="Center" />
+                                    <ComboBox Grid.Row="2"
+                                              Grid.Column="1"
+                                              Margin="0,8,0,0"
+                                              ItemsSource="{Binding MipmapFilterOptions}"
+                                              SelectedItem="{Binding SelectedMipmapFilter}" />
+                                </Grid>
                                 <CheckBox Content="Preserve alpha"
                                           IsChecked="{Binding PreserveAlpha}" />
                             </StackPanel>

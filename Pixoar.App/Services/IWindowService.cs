@@ -8,9 +8,10 @@ namespace Pixoar.App.Services;
 public interface IWindowService
 {
     /// <summary>
-    /// Opens the settings window.
+    /// Opens the settings window using the supplied image context for contextual controls.
     /// </summary>
-    void ShowSettingsWindow();
+    /// <param name="images">The current source images, if available.</param>
+    void ShowSettingsWindow(IReadOnlyCollection<ImageFileItem> images);
 
     /// <summary>
     /// Opens the image information dialog for the supplied image.

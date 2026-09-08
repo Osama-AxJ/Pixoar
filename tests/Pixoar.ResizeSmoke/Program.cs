@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using ImageMagick;
 using Microsoft.Extensions.DependencyInjection;
+using Pixoar.App.Models;
 using Pixoar.Core.Configuration;
 using Pixoar.Core.Interfaces;
 using Pixoar.Core.Models;
@@ -76,6 +77,8 @@ internal static class Program
         var dependencyService = provider.GetRequiredService<IDdsDependencyService>();
 
         await settingsService.LoadAsync();
+        VerifyImageListSorting();
+        VerifyDdsMipmapDepthCalculations();
         await ApplyDdsSettingsAsync(
             settingsService,
             DdsCompressionMode.Dxt3,
@@ -358,6 +361,95 @@ internal static class Program
         Console.WriteLine("PASS batch: 8/8 succeeded, numbered duplicates, 16 progress events.");
     }
 
+    private static void VerifyImageListSorting()
+    {
+        var images = new[]
+        {
+            new ImageFileItem { FileName = "large.png", PixelWidth = 40, PixelHeight = 40, NormalizedFormat = "PNG", FileSizeBytes = 8_192 },
+            new ImageFileItem { FileName = "wide.jpg", PixelWidth = 40, PixelHeight = 20, NormalizedFormat = "JPG", FileSizeBytes = 1_024 },
+            new ImageFileItem { FileName = "tall.webp", PixelWidth = 20, PixelHeight = 40, NormalizedFormat = "WEBP", FileSizeBytes = 512 },
+            new ImageFileItem { FileName = "small.dds", PixelWidth = 20, PixelHeight = 20, NormalizedFormat = "DDS", FileSizeBytes = 256 }
+        };
+
+        Assert(
+            ImageListSorter.Sort(images, ImageListSortColumn.Resolution, ascending: true)
+                .Select(image => image.FileName)
+                .SequenceEqual(["small.dds", "tall.webp", "wide.jpg", "large.png"]),
+            "Resolution sorting did not use pixel area, then width and height.");
+        Assert(
+            ImageListSorter.Sort(images, ImageListSortColumn.Format, ascending: true)
+                .Select(image => image.FileName)
+                .SequenceEqual(["small.dds", "wide.jpg", "large.png", "tall.webp"]),
+            "Format sorting was not case-insensitive and normalized.");
+        Assert(
+            ImageListSorter.Sort(images, ImageListSortColumn.Size, ascending: false)
+                .Select(image => image.FileName)
+                .SequenceEqual(["large.png", "wide.jpg", "tall.webp", "small.dds"]),
+            "Size sorting did not use raw byte counts.");
+
+        Console.WriteLine("PASS image-list sorting: resolution, format, size, and direction verified.");
+    }
+
+    private static void VerifyDdsMipmapDepthCalculations()
+    {
+        AssertPresetLabels(
+            DdsMipmapSizeOption.CreateSensiblePresetOptions(1024),
+            ["64 px", "32 px", "16 px", "8 px", "4 px", "2 px", "1 px"],
+            "1024x1024");
+        AssertPresetLabels(
+            DdsMipmapSizeOption.CreateSensiblePresetOptions(32),
+            ["16 px", "8 px", "4 px", "2 px", "1 px"],
+            "32x32");
+        AssertPresetLabels(
+            DdsMipmapSizeOption.CreateSensiblePresetOptions(Math.Min(2048, 32)),
+            ["16 px", "8 px", "4 px", "2 px", "1 px"],
+            "rectangular texture");
+        AssertPresetLabels(
+            DdsMipmapSizeOption.CreateSensiblePresetOptions(70),
+            ["64 px", "32 px", "16 px", "8 px", "4 px", "2 px", "1 px"],
+            "non-power-of-two texture");
+        var smallTextureOptions = DdsMipmapSizeOption.CreateSensiblePresetOptions(1);
+        Assert(smallTextureOptions.Count == 0, "A 1 px texture should not show an unusable downscale endpoint.");
+        Assert(
+            DdsMipmapSizeOption.ResolveToSensiblePreset(
+                4096,
+                DdsMipmapSizeOption.CreateSensiblePresetOptions(32)) == 16,
+            "An excessive legacy Stop at value was not resolved safely for the current image.");
+
+        Assert(DdsMipmapCalculator.CalculateMipCount(1024, 1024, 4) == 9, "1024x1024 to 4 px should use nine mip levels.");
+        Assert(DdsMipmapCalculator.CalculateMipCount(2048, 1024, 4) == 9, "2048x1024 to 4 px should stop at 8x4.");
+        Assert(DdsMipmapCalculator.CalculateMipCount(1024, 512, 4) == 8, "1024x512 to 4 px should use eight mip levels.");
+        Assert(DdsMipmapCalculator.CalculateMipCount(512, 256, 8) == 6, "512x256 to 8 px should use six mip levels.");
+        Assert(DdsMipmapCalculator.CalculateMipCount(300, 170, 4) == 7, "Non-power-of-two dimensions did not follow valid mip halving.");
+        Assert(DdsMipmapCalculator.CalculateMipCount(2, 1, 4) == 1, "Textures smaller than the target should retain their base level.");
+        Assert(DdsMipmapCalculator.CalculateMipCount(64, 32, 32) == 1, "A target equal to the smallest source dimension should retain its base level.");
+        Assert(DdsMipmapCalculator.CalculateMipCount(1024, 1024, 1) == 11, "A 1 px target should generate the complete square mip chain.");
+
+        var batchCounts = new[]
+        {
+            DdsMipmapCalculator.CalculateMipCount(2048, 2048, 4),
+            DdsMipmapCalculator.CalculateMipCount(1024, 512, 4),
+            DdsMipmapCalculator.CalculateMipCount(512, 256, 4)
+        };
+        Assert(batchCounts.SequenceEqual([10, 8, 7]), "Mixed-size batch images did not calculate independent mip counts.");
+        Console.WriteLine("PASS DDS mip depth: smallest-size calculation, rectangular, edge, and batch cases verified.");
+    }
+
+    private static void AssertPresetLabels(
+        IReadOnlyList<DdsMipmapSizeOption> options,
+        IReadOnlyList<string> expectedLabels,
+        string scenario)
+    {
+        var labels = options.Select(option => option.DisplayName).ToArray();
+        Assert(
+            labels.SequenceEqual(expectedLabels, StringComparer.Ordinal),
+            $"The Stop at presets were incorrect for {scenario}.");
+        Assert(
+            options.All(option => string.Equals(option.ToString(), option.DisplayName, StringComparison.Ordinal) &&
+                !option.ToString().Contains(nameof(DdsMipmapSizeOption), StringComparison.Ordinal)),
+            $"The Stop at ComboBox would show a type name for {scenario}.");
+    }
+
     private static async Task VerifyDdsSettingsAsync(
         string fixtureRoot,
         SmokeApplicationPathProvider pathProvider,
@@ -421,6 +513,66 @@ internal static class Program
         Assert(
             logDelta.Contains("DDS Preserve Alpha: False", StringComparison.Ordinal),
             "Preserve alpha=false was not logged.");
+        Assert(
+            !logDelta.Contains("Generated texconv arguments: -y -m", StringComparison.Ordinal) &&
+            !logDelta.Contains(" -if ", StringComparison.Ordinal),
+            "Default full-chain mipmaps unexpectedly changed texconv arguments.");
+
+        await ApplyDdsSettingsAsync(
+            settingsService,
+            DdsCompressionMode.Dxt5,
+            generateMipmaps: true,
+            preserveAlpha: true,
+            mipmapMode: DdsMipmapMode.CustomCount,
+            smallestMipSize: 4,
+            mipmapFilter: DdsMipmapFilter.Triangle);
+        var customInput = Path.Combine(fixtureRoot, "settings_custom_mipmaps.dds");
+        File.Copy(ddsFixture.InputPath, customInput);
+        logLengthBefore = GetLogLength(pathProvider.LogsDirectory);
+        var customResult = await AssertNoGuidTempLeakAsync(
+            () => resizeService.ResizeAsync(CreatePercentageRequest(customInput, 50)));
+        Assert(customResult.Success && customResult.OutputPath is not null, "Custom DDS mipmap resize failed.");
+        Assert(ReadDdsHeader(customResult.OutputPath!).MipmapCount == 5, "Custom smallest-mip DDS depth was not applied.");
+        logDelta = ReadLogDelta(pathProvider.LogsDirectory, logLengthBefore);
+        Assert(logDelta.Contains("-m 5", StringComparison.Ordinal), "Custom smallest-mip depth was not passed to texconv.");
+        Assert(logDelta.Contains("-if TRIANGLE", StringComparison.Ordinal), "Custom DDS mipmap filter was not passed to texconv.");
+
+        using (var reloadedProvider = CreateProvider(pathProvider))
+        {
+            var persistedSettings = await reloadedProvider.GetRequiredService<ISettingsService>().LoadAsync();
+            Assert(persistedSettings.Dds.MipmapMode == DdsMipmapMode.CustomCount, "DDS mipmap mode did not persist.");
+            Assert(persistedSettings.Dds.SmallestMipSize == 4, "DDS smallest mip size did not persist.");
+            Assert(persistedSettings.Dds.MipmapFilter == DdsMipmapFilter.Triangle, "DDS mipmap filter did not persist.");
+        }
+
+        await ApplyDdsSettingsAsync(
+            settingsService,
+            DdsCompressionMode.Dxt5,
+            generateMipmaps: true,
+            preserveAlpha: true,
+            mipmapMode: DdsMipmapMode.CustomCount,
+            smallestMipSize: 4096);
+        var excessiveTargetInput = Path.Combine(fixtureRoot, "settings_excessive_smallest_mip.dds");
+        File.Copy(ddsFixture.InputPath, excessiveTargetInput);
+        var excessiveTargetResult = await AssertNoGuidTempLeakAsync(
+            () => resizeService.ResizeAsync(CreatePercentageRequest(excessiveTargetInput, 50)));
+        Assert(
+            excessiveTargetResult.Success && excessiveTargetResult.OutputPath is not null &&
+            ReadDdsHeader(excessiveTargetResult.OutputPath).MipmapCount == 1,
+            "An excessive legacy smallest-mip target did not safely retain the base level.");
+
+        await ApplyDdsSettingsAsync(
+            settingsService,
+            DdsCompressionMode.Dxt5,
+            generateMipmaps: true,
+            preserveAlpha: true,
+            mipmapMode: DdsMipmapMode.CustomCount,
+            customMipCount: 8);
+        var invalidInput = Path.Combine(fixtureRoot, "settings_invalid_mipmaps.dds");
+        File.Copy(ddsFixture.InputPath, invalidInput);
+        var invalidResult = await AssertNoGuidTempLeakAsync(
+            () => resizeService.ResizeAsync(CreatePercentageRequest(invalidInput, 50)));
+        Assert(!invalidResult.Success, "An invalid DDS mip count was accepted for an 80x48 output.");
 
         await ApplyDdsSettingsAsync(
             settingsService,
@@ -947,6 +1099,50 @@ internal static class Program
                 "A legacy settings file with no convertPresets property lost the default presets.");
         }
 
+        var ddsFilterSettings = new[]
+        {
+            (Name: "DdsFilterMissing", Json: "{ \"schemaVersion\": 1, \"dds\": {} }"),
+            (Name: "DdsFilterDefault", Json: "{ \"schemaVersion\": 1, \"dds\": { \"mipmapFilter\": \"default\" } }"),
+            (Name: "DdsFilterTexconvDefault", Json: "{ \"schemaVersion\": 1, \"dds\": { \"mipmapFilter\": \"texconvDefault\" } }"),
+            (Name: "DdsFilterLegacyNumber", Json: "{ \"schemaVersion\": 1, \"dds\": { \"mipmapFilter\": 0 } }")
+        };
+
+        foreach (var legacyFilter in ddsFilterSettings)
+        {
+            var filterPathProvider = new SmokeApplicationPathProvider(Path.Combine(settingsRoot, legacyFilter.Name));
+            Directory.CreateDirectory(filterPathProvider.AppDataDirectory);
+            await File.WriteAllTextAsync(filterPathProvider.SettingsFilePath, legacyFilter.Json);
+            using var provider = CreateProvider(filterPathProvider);
+            var settings = await provider.GetRequiredService<ISettingsService>().LoadAsync();
+            Assert(
+                settings.Dds.MipmapFilter == DdsMipmapFilter.Fant,
+                $"Legacy DDS mipmap filter '{legacyFilter.Name}' did not resolve to Fant.");
+
+            if (legacyFilter.Name != "DdsFilterMissing")
+            {
+                var migratedJson = await File.ReadAllTextAsync(filterPathProvider.SettingsFilePath);
+                Assert(
+                    migratedJson.Contains("\"mipmapFilter\": \"fant\"", StringComparison.Ordinal),
+                    $"Legacy DDS mipmap filter '{legacyFilter.Name}' was not migrated to Fant.");
+            }
+        }
+
+        var legacyMipCountPathProvider = new SmokeApplicationPathProvider(
+            Path.Combine(settingsRoot, "LegacyCustomMipCount"));
+        Directory.CreateDirectory(legacyMipCountPathProvider.AppDataDirectory);
+        await File.WriteAllTextAsync(
+            legacyMipCountPathProvider.SettingsFilePath,
+            "{ \"schemaVersion\": 1, \"dds\": { \"mipmapMode\": \"customCount\", \"customMipCount\": 3 } }");
+        using (var provider = CreateProvider(legacyMipCountPathProvider))
+        {
+            var settings = await provider.GetRequiredService<ISettingsService>().LoadAsync();
+            Assert(
+                settings.Dds.MipmapMode == DdsMipmapMode.CustomCount &&
+                settings.Dds.CustomMipCount == 3 &&
+                settings.Dds.SmallestMipSize is null,
+                "Legacy numeric DDS mip settings were not retained safely.");
+        }
+
         var persistencePathProvider = new SmokeApplicationPathProvider(
             Path.Combine(settingsRoot, "Persistence"));
         using (var provider = CreateProvider(persistencePathProvider))
@@ -1136,7 +1332,11 @@ internal static class Program
         ISettingsService settingsService,
         DdsCompressionMode compression,
         bool generateMipmaps,
-        bool preserveAlpha)
+        bool preserveAlpha,
+        DdsMipmapMode mipmapMode = DdsMipmapMode.FullChain,
+        int customMipCount = 1,
+        int? smallestMipSize = null,
+        DdsMipmapFilter mipmapFilter = DdsMipmapFilter.Fant)
     {
         await settingsService.UpdateAsync(settings =>
         {
@@ -1144,6 +1344,10 @@ internal static class Program
             settings.Output.ConflictBehavior = OutputConflictBehavior.RenameDuplicatesAutomatically;
             settings.Dds.Compression = compression;
             settings.Dds.GenerateMipmaps = generateMipmaps;
+            settings.Dds.MipmapMode = mipmapMode;
+            settings.Dds.CustomMipCount = customMipCount;
+            settings.Dds.SmallestMipSize = smallestMipSize;
+            settings.Dds.MipmapFilter = mipmapFilter;
             settings.Dds.PreserveAlpha = preserveAlpha;
         });
     }

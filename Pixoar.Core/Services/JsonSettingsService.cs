@@ -40,19 +40,21 @@ internal sealed class JsonSettingsService(
             try
             {
                 PixoarSettings? settings;
+                var migrateLegacyDdsMipmapFilter = false;
 
                 await using (var stream = await OpenSettingsReadStreamAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    settings = await JsonSerializer.DeserializeAsync<PixoarSettings>(
-                        stream,
-                        SerializerOptions,
-                        cancellationToken).ConfigureAwait(false);
+                    using var reader = new StreamReader(stream);
+                    var settingsJson = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+                    settings = JsonSerializer.Deserialize<PixoarSettings>(settingsJson, SerializerOptions);
+                    migrateLegacyDdsMipmapFilter = HasLegacyDdsMipmapFilter(settingsJson);
                 }
 
                 var beforeNormalization = JsonSerializer.Serialize(settings, SerializerOptions);
                 _current = settingsFactory.Normalize(settings);
                 var afterNormalization = JsonSerializer.Serialize(_current, SerializerOptions);
-                if (!string.Equals(beforeNormalization, afterNormalization, StringComparison.Ordinal))
+                if (migrateLegacyDdsMipmapFilter ||
+                    !string.Equals(beforeNormalization, afterNormalization, StringComparison.Ordinal))
                 {
                     await SaveUnlockedAsync(cancellationToken).ConfigureAwait(false);
                     await logger.LogInformationAsync(
@@ -215,5 +217,45 @@ internal sealed class JsonSettingsService(
         var brokenFilePath = Path.Combine(pathProvider.AppDataDirectory, "settings.broken.json");
         File.Move(pathProvider.SettingsFilePath, brokenFilePath, overwrite: true);
         return Task.CompletedTask;
+    }
+
+    private static bool HasLegacyDdsMipmapFilter(string settingsJson)
+    {
+        using var document = JsonDocument.Parse(settingsJson);
+        if (!TryGetPropertyIgnoreCase(document.RootElement, "dds", out var dds) ||
+            !TryGetPropertyIgnoreCase(dds, "mipmapFilter", out var filter))
+        {
+            return false;
+        }
+
+        if (filter.ValueKind == JsonValueKind.String)
+        {
+            return filter.GetString()?.Trim().ToLowerInvariant() is "default" or "texconvdefault" or "default (texconv)";
+        }
+
+        return filter.ValueKind == JsonValueKind.Number &&
+            filter.TryGetInt32(out var value) &&
+            value == 0;
+    }
+
+    private static bool TryGetPropertyIgnoreCase(
+        JsonElement element,
+        string name,
+        out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
     }
 }

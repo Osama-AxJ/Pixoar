@@ -122,6 +122,10 @@ internal sealed class DdsService(
         {
             Compression = settings.Compression,
             GenerateMipmaps = settings.GenerateMipmaps,
+            MipmapMode = settings.MipmapMode,
+            CustomMipCount = settings.CustomMipCount,
+            SmallestMipSize = settings.SmallestMipSize,
+            MipmapFilter = settings.MipmapFilter,
             PreserveAlpha = settings.PreserveAlpha
         };
     }

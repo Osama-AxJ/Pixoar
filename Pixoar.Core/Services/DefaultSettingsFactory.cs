@@ -33,11 +33,35 @@ internal sealed class DefaultSettingsFactory : ISettingsFactory
         settings.ContextMenu ??= defaults.ContextMenu;
         settings.ResizePresets ??= defaults.ResizePresets;
         settings.ConvertPresets ??= defaults.ConvertPresets;
+        NormalizeDdsSettings(settings.Dds);
         NormalizeOutputSettings(settings.Output);
         settings.ResizePresets = NormalizeResizePresets(settings.ResizePresets);
         settings.ConvertPresets = NormalizeConvertPresets(settings.ConvertPresets);
 
         return settings;
+    }
+
+    private static void NormalizeDdsSettings(DdsSettings settings)
+    {
+        if (!Enum.IsDefined(settings.Compression))
+        {
+            settings.Compression = DdsCompressionMode.Dxt5;
+        }
+
+        if (!Enum.IsDefined(settings.MipmapMode))
+        {
+            settings.MipmapMode = DdsMipmapMode.FullChain;
+        }
+
+        if (!Enum.IsDefined(settings.MipmapFilter))
+        {
+            settings.MipmapFilter = DdsMipmapFilter.Fant;
+        }
+
+        settings.CustomMipCount = Math.Clamp(settings.CustomMipCount, 1, 15);
+        settings.SmallestMipSize = settings.SmallestMipSize is > 0
+            ? Math.Min(settings.SmallestMipSize.Value, 16384)
+            : null;
     }
 
     private static void NormalizeOutputSettings(OutputSettings settings)

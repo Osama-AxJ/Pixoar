@@ -34,6 +34,12 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _saveResizedFilesInResizeFolder;
     private string _selectedCompression = "DXT5";
     private bool _generateMipmaps = true;
+    private string _selectedMipmapMode = "Full chain";
+    private int _selectedSmallestMipSize = 4;
+    private IReadOnlyList<DdsMipmapSizeOption> _smallestMipSizeOptions = DdsMipmapSizeOption.CreateSensiblePresetOptions(int.MaxValue);
+    private bool _usesLegacyCustomMipCount;
+    private bool _smallestMipSizeChanged;
+    private string _selectedMipmapFilter = "Fant (Default)";
     private bool _preserveAlpha = true;
     private bool _enableContextMenu = false;
     private bool _enableResizePresets = true;
@@ -73,6 +79,8 @@ public sealed class SettingsViewModel : ViewModelBase
         _fileDialogService = fileDialogService;
 
         CompressionOptions = ["DXT1", "DXT3", "DXT5", "BC7", "Uncompressed"];
+        MipmapModeOptions = ["Full chain", "Custom"];
+        MipmapFilterOptions = ["Fant (Default)", "Linear", "Cubic", "Triangle"];
 
         var settings = settingsService.Current;
         _checkForUpdates = settings.General.CheckForUpdates;
@@ -83,6 +91,11 @@ public sealed class SettingsViewModel : ViewModelBase
         _saveResizedFilesInResizeFolder = settings.Output.SaveResizedFilesInResizeFolder;
         _selectedCompression = FormatCompression(settings.Dds.Compression.ToString());
         _generateMipmaps = settings.Dds.GenerateMipmaps;
+        _selectedMipmapMode = FormatMipmapMode(settings.Dds.MipmapMode);
+        _usesLegacyCustomMipCount = settings.Dds.MipmapMode == DdsMipmapMode.CustomCount &&
+            settings.Dds.SmallestMipSize is null;
+        _selectedSmallestMipSize = settings.Dds.SmallestMipSize ?? 4;
+        _selectedMipmapFilter = FormatMipmapFilter(settings.Dds.MipmapFilter);
         _preserveAlpha = settings.Dds.PreserveAlpha;
         _enableContextMenu = settings.ContextMenu.EnableContextMenu;
         _enableResizePresets = settings.ContextMenu.EnableResizePresets;
@@ -120,6 +133,25 @@ public sealed class SettingsViewModel : ViewModelBase
     /// Gets DDS compression options.
     /// </summary>
     public IReadOnlyList<string> CompressionOptions { get; }
+
+    /// <summary>
+    /// Gets the available DDS mipmap chain modes.
+    /// </summary>
+    public IReadOnlyList<string> MipmapModeOptions { get; }
+
+    /// <summary>
+    /// Gets the available smallest DDS mip dimensions.
+    /// </summary>
+    public IReadOnlyList<DdsMipmapSizeOption> SmallestMipSizeOptions
+    {
+        get => _smallestMipSizeOptions;
+        private set => SetProperty(ref _smallestMipSizeOptions, value);
+    }
+
+    /// <summary>
+    /// Gets the supported DDS mipmap filters.
+    /// </summary>
+    public IReadOnlyList<string> MipmapFilterOptions { get; }
 
     /// <summary>
     /// Gets editable resize presets.
@@ -315,7 +347,88 @@ public sealed class SettingsViewModel : ViewModelBase
     public bool GenerateMipmaps
     {
         get => _generateMipmaps;
-        set => SetProperty(ref _generateMipmaps, value);
+        set
+        {
+            if (SetProperty(ref _generateMipmaps, value))
+            {
+                OnPropertyChanged(nameof(IsCustomMipSizeVisible));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the DDS mipmap chain mode.
+    /// </summary>
+    public string SelectedMipmapMode
+    {
+        get => _selectedMipmapMode;
+        set
+        {
+            if (SetProperty(ref _selectedMipmapMode, value))
+            {
+                OnPropertyChanged(nameof(IsCustomMipSizeVisible));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the selected smallest DDS mip dimension.
+    /// </summary>
+    public int SelectedSmallestMipSize
+    {
+        get => _selectedSmallestMipSize;
+        set
+        {
+            if (SetProperty(ref _selectedSmallestMipSize, Math.Max(1, value)))
+            {
+                _smallestMipSizeChanged = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the DDS mipmap filter.
+    /// </summary>
+    public string SelectedMipmapFilter
+    {
+        get => _selectedMipmapFilter;
+        set => SetProperty(ref _selectedMipmapFilter, value);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the smallest-mip selector should be visible.
+    /// </summary>
+    public bool IsCustomMipSizeVisible =>
+        GenerateMipmaps && string.Equals(SelectedMipmapMode, "Custom", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Limits smallest-mip choices to values that every current source image can reach.
+    /// </summary>
+    /// <param name="images">The source images selected for the current desktop operation.</param>
+    public void SetSmallestMipSizeOptionsForSources(IEnumerable<ImageFileItem> images)
+    {
+        ArgumentNullException.ThrowIfNull(images);
+
+        var smallestSourceDimension = images
+            .Where(image => image.PixelWidth > 0 && image.PixelHeight > 0)
+            .Select(image => Math.Min(image.PixelWidth, image.PixelHeight))
+            .DefaultIfEmpty(0)
+            .Min();
+        if (smallestSourceDimension < 1)
+        {
+            return;
+        }
+
+        SmallestMipSizeOptions = DdsMipmapSizeOption.CreateSensiblePresetOptions(smallestSourceDimension);
+        if (SmallestMipSizeOptions.Any(option => option.Size == SelectedSmallestMipSize))
+        {
+            return;
+        }
+
+        _selectedSmallestMipSize = DdsMipmapSizeOption.ResolveToSensiblePreset(
+            SelectedSmallestMipSize,
+            SmallestMipSizeOptions);
+        OnPropertyChanged(nameof(SelectedSmallestMipSize));
     }
 
     /// <summary>
@@ -635,6 +748,12 @@ public sealed class SettingsViewModel : ViewModelBase
 
             settings.Dds.Compression = ParseCompression(SelectedCompression);
             settings.Dds.GenerateMipmaps = GenerateMipmaps;
+            settings.Dds.MipmapMode = ParseMipmapMode(SelectedMipmapMode);
+            if (!_usesLegacyCustomMipCount || _smallestMipSizeChanged)
+            {
+                settings.Dds.SmallestMipSize = SelectedSmallestMipSize;
+            }
+            settings.Dds.MipmapFilter = ParseMipmapFilter(SelectedMipmapFilter);
             settings.Dds.PreserveAlpha = PreserveAlpha;
 
             settings.ContextMenu.EnableContextMenu = EnableContextMenu;
@@ -697,6 +816,42 @@ public sealed class SettingsViewModel : ViewModelBase
             "BC7" => DdsCompressionMode.Bc7,
             "Uncompressed" => DdsCompressionMode.Uncompressed,
             _ => DdsCompressionMode.Dxt5
+        };
+    }
+
+    private static string FormatMipmapMode(DdsMipmapMode mode)
+    {
+        return mode == DdsMipmapMode.CustomCount ? "Custom" : "Full chain";
+    }
+
+    private static DdsMipmapMode ParseMipmapMode(string value)
+    {
+        return string.Equals(value, "Custom", StringComparison.Ordinal)
+            ? DdsMipmapMode.CustomCount
+            : DdsMipmapMode.FullChain;
+    }
+
+    private static string FormatMipmapFilter(DdsMipmapFilter filter)
+    {
+        return filter switch
+        {
+            DdsMipmapFilter.Fant => "Fant (Default)",
+            DdsMipmapFilter.Linear => "Linear",
+            DdsMipmapFilter.Cubic => "Cubic",
+            DdsMipmapFilter.Triangle => "Triangle",
+            _ => "Fant (Default)"
+        };
+    }
+
+    private static DdsMipmapFilter ParseMipmapFilter(string value)
+    {
+        return value switch
+        {
+            "Fant (Default)" or "Fant" => DdsMipmapFilter.Fant,
+            "Linear" => DdsMipmapFilter.Linear,
+            "Cubic" => DdsMipmapFilter.Cubic,
+            "Triangle" => DdsMipmapFilter.Triangle,
+            _ => DdsMipmapFilter.Fant
         };
     }
 

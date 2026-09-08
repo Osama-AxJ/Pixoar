@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ImageMagick;
 using Pixoar.Core.Interfaces;
 using Pixoar.Core.Models;
 
@@ -29,11 +30,7 @@ internal sealed class TexconvDdsEncoder(
             "-y"
         };
 
-        if (!settings.GenerateMipmaps)
-        {
-            arguments.Add("-m");
-            arguments.Add("1");
-        }
+        AddMipmapArguments(arguments, inputPath, settings);
 
         if (settings.PreserveAlpha)
         {
@@ -206,6 +203,11 @@ internal sealed class TexconvDdsEncoder(
     {
         await logger.LogInformationAsync($"DDS Compression: {FormatCompressionForLog(settings.Compression)} ({compressionFormat})", cancellationToken).ConfigureAwait(false);
         await logger.LogInformationAsync($"DDS Mipmaps: {settings.GenerateMipmaps}", cancellationToken).ConfigureAwait(false);
+        await logger.LogInformationAsync(
+            $"DDS Mipmap Mode: {(settings.GenerateMipmaps ? settings.MipmapMode.ToString() : "Disabled")}; " +
+            $"Depth: {(settings.GenerateMipmaps && settings.MipmapMode == DdsMipmapMode.CustomCount ? FormatMipmapDepthForLog(settings) : "texconv full chain")}; " +
+            $"Filter: {(settings.GenerateMipmaps ? settings.MipmapFilter.ToString() : "not applied")}",
+            cancellationToken).ConfigureAwait(false);
         await logger.LogInformationAsync($"DDS Preserve Alpha: {settings.PreserveAlpha}", cancellationToken).ConfigureAwait(false);
         await logger.LogInformationAsync(
             $"DDS Header Mode: {(settings.Compression == DdsCompressionMode.Bc7 ? "DX10 Texture2D" : "Legacy DX9 Texture2D")}",
@@ -269,6 +271,87 @@ internal sealed class TexconvDdsEncoder(
             DdsCompressionMode.Bc7 => "BC7_UNORM_SRGB",
             DdsCompressionMode.Uncompressed => "R8G8B8A8_UNORM",
             _ => "BC3_UNORM"
+        };
+    }
+
+    private static void AddMipmapArguments(
+        ICollection<string> arguments,
+        string inputPath,
+        DdsSettings settings)
+    {
+        if (!settings.GenerateMipmaps)
+        {
+            arguments.Add("-m");
+            arguments.Add("1");
+            return;
+        }
+
+        if (!Enum.IsDefined(settings.MipmapMode) || !Enum.IsDefined(settings.MipmapFilter))
+        {
+            throw new ArgumentOutOfRangeException(nameof(settings), "The selected DDS mipmap settings are not supported.");
+        }
+
+        if (settings.MipmapMode == DdsMipmapMode.CustomCount)
+        {
+            var (width, height) = GetImageDimensions(inputPath);
+            var mipCount = settings.SmallestMipSize is > 0
+                ? DdsMipmapCalculator.CalculateMipCount(width, height, settings.SmallestMipSize.Value)
+                : GetLegacyMipCount(width, height, settings.CustomMipCount);
+
+            arguments.Add("-m");
+            arguments.Add(mipCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        var filter = ToTexconvMipmapFilter(settings.MipmapFilter);
+        if (filter is not null)
+        {
+            arguments.Add("-if");
+            arguments.Add(filter);
+        }
+    }
+
+    private static int GetLegacyMipCount(int width, int height, int legacyMipCount)
+    {
+        var maximumMipCount = DdsMipmapCalculator.CalculateFullChainMipCount(width, height);
+        if (legacyMipCount < 1 || legacyMipCount > maximumMipCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(legacyMipCount),
+                $"The requested DDS mip count must be between 1 and {maximumMipCount} for this image.");
+        }
+
+        return legacyMipCount;
+    }
+
+    private static (int Width, int Height) GetImageDimensions(string inputPath)
+    {
+        var imageInfo = new MagickImageInfo(inputPath);
+        var width = (int)imageInfo.Width;
+        var height = (int)imageInfo.Height;
+        if (width < 1 || height < 1)
+        {
+            throw new InvalidDataException("The DDS source image has invalid dimensions.");
+        }
+
+        return (width, height);
+    }
+
+    private static string FormatMipmapDepthForLog(DdsSettings settings)
+    {
+        return settings.SmallestMipSize is > 0
+            ? $"smallest dimension {settings.SmallestMipSize} px"
+            : $"legacy count {settings.CustomMipCount}";
+    }
+
+    private static string? ToTexconvMipmapFilter(DdsMipmapFilter filter)
+    {
+        return filter switch
+        {
+            DdsMipmapFilter.Fant => null,
+            DdsMipmapFilter.Linear => "LINEAR",
+            DdsMipmapFilter.Cubic => "CUBIC",
+            DdsMipmapFilter.Triangle => "TRIANGLE",
+            _ => throw new ArgumentOutOfRangeException(nameof(filter), filter, "Unsupported DDS mipmap filter.")
         };
     }
 

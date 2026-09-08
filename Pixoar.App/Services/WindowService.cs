@@ -8,9 +8,10 @@ namespace Pixoar.App.Services;
 
 internal sealed class WindowService(IServiceProvider serviceProvider) : IWindowService
 {
-    public void ShowSettingsWindow()
+    public void ShowSettingsWindow(IReadOnlyCollection<ImageFileItem> images)
     {
         var window = serviceProvider.GetRequiredService<SettingsWindow>();
+        ((SettingsViewModel)window.DataContext).SetSmallestMipSizeOptionsForSources(images);
         window.Owner = Application.Current.MainWindow;
         window.ShowDialog();
     }
