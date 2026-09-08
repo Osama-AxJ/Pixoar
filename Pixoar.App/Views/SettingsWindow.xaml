@@ -101,7 +101,7 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE8B7;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,8,0" />
-                        <TextBlock Text="Output" />
+                        <TextBlock Text="Explorer Output" />
                     </StackPanel>
                 </TabItem.Header>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -120,7 +120,8 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.ColumnSpan="3"
-                                       Text="Output"
+                                       Text="Explorer Output"
+                                       ToolTip="Desktop Convert and Resize use the Export button after processing."
                                        Style="{StaticResource SectionTitleTextBlockStyle}" />
 
                             <CheckBox Grid.Row="1"

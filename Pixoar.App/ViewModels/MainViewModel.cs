@@ -26,7 +26,14 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IImageConversionService _imageConversionService;
     private readonly IImageResizeService _imageResizeService;
     private readonly ISettingsService _settingsService;
-    private readonly IUserPromptService _userPromptService;
+    private readonly string _pendingExportRoot = Path.Combine(
+        Path.GetTempPath(),
+        "Pixoar",
+        "PendingExports",
+        Guid.NewGuid().ToString("N"));
+    private readonly List<string> _pendingExportPaths = [];
+    private readonly Dictionary<string, ImageFileItem> _visibleStagedResults =
+        new(StringComparer.OrdinalIgnoreCase);
     private ImageFileItem? _selectedImage;
     private string _statusText = "Ready";
     private string _selectedOutputFormat = "PNG";
@@ -40,6 +47,7 @@ public sealed class MainViewModel : ViewModelBase
     private double _progressPercent;
     private bool _isBusy;
     private bool _isUpdatingLinkedDimension;
+    private bool _isProcessedListActive;
     private int _previewLoadVersion;
 
     /// <summary>
@@ -53,8 +61,7 @@ public sealed class MainViewModel : ViewModelBase
         IImagePreviewService imagePreviewService,
         IImageConversionService imageConversionService,
         IImageResizeService imageResizeService,
-        ISettingsService settingsService,
-        IUserPromptService userPromptService)
+        ISettingsService settingsService)
     {
         _fileDialogService = fileDialogService;
         _windowService = windowService;
@@ -64,7 +71,6 @@ public sealed class MainViewModel : ViewModelBase
         _imageConversionService = imageConversionService;
         _imageResizeService = imageResizeService;
         _settingsService = settingsService;
-        _userPromptService = userPromptService;
 
         ApplicationTitle = "Pixoar";
         VersionText = $"Version {GetVersionText()}";
@@ -84,9 +90,13 @@ public sealed class MainViewModel : ViewModelBase
         DropFilesCommand = new AsyncRelayCommand(AddDroppedPathsAsync, _ => !IsBusy);
         ConvertCommand = new AsyncRelayCommand(_ => ConvertSelectedAsync(), _ => HasSelection && !IsBusy);
         ResizeCommand = new AsyncRelayCommand(_ => ResizeSelectedAsync(), _ => CanResize);
+        ExportCommand = new AsyncRelayCommand(_ => ExportPendingAsync(), _ => CanExport);
+        ShowSourceImagesCommand = new RelayCommand(_ => ShowSourceImages(), _ => !IsBusy);
+        ShowProcessedImagesCommand = new RelayCommand(_ => ShowProcessedImages(), _ => !IsBusy);
 
         SelectedImages.CollectionChanged += OnSelectedImagesChanged;
         Images.CollectionChanged += OnImagesChanged;
+        ProcessedImages.CollectionChanged += OnProcessedImagesChanged;
     }
 
     /// <summary>
@@ -108,6 +118,11 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets the selected image entries.
     /// </summary>
     public ObservableCollection<ImageFileItem> SelectedImages { get; } = [];
+
+    /// <summary>
+    /// Gets completed images that are ready for export or further editing.
+    /// </summary>
+    public ObservableCollection<ImageFileItem> ProcessedImages { get; } = [];
 
     /// <summary>
     /// Gets user-visible processing errors.
@@ -185,6 +200,42 @@ public sealed class MainViewModel : ViewModelBase
     public AsyncRelayCommand ResizeCommand { get; }
 
     /// <summary>
+    /// Gets the command that exports completed desktop results to a selected folder.
+    /// </summary>
+    public AsyncRelayCommand ExportCommand { get; }
+
+    /// <summary>
+    /// Gets the command that displays source images.
+    /// </summary>
+    public RelayCommand ShowSourceImagesCommand { get; }
+
+    /// <summary>
+    /// Gets the command that displays processed images.
+    /// </summary>
+    public RelayCommand ShowProcessedImagesCommand { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the processed-images view is active.
+    /// </summary>
+    public bool IsProcessedListActive => _isProcessedListActive;
+
+    /// <summary>
+    /// Gets the image collection shown in the primary list panel.
+    /// </summary>
+    public ObservableCollection<ImageFileItem> DisplayedImages =>
+        IsProcessedListActive ? ProcessedImages : Images;
+
+    /// <summary>
+    /// Gets the title for the primary list panel.
+    /// </summary>
+    public string ActiveListTitle => IsProcessedListActive ? "Processed Images" : "Image List";
+
+    /// <summary>
+    /// Gets the number of images in the active list.
+    /// </summary>
+    public int ActiveListCount => DisplayedImages.Count;
+
+    /// <summary>
     /// Gets or sets the selected image displayed in the preview panel.
     /// </summary>
     public ImageFileItem? SelectedImage
@@ -207,6 +258,11 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets a value indicating whether at least one image is selected.
     /// </summary>
     public bool HasSelection => SelectedImages.Count > 0;
+
+    /// <summary>
+    /// Gets a value indicating whether processed images are ready to export.
+    /// </summary>
+    public bool CanExport => !IsBusy && _pendingExportPaths.Any(File.Exists);
 
     /// <summary>
     /// Gets a value indicating whether the preview panel has a selected image.
@@ -242,6 +298,11 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets the loaded image count.
     /// </summary>
     public int LoadedCount => Images.Count;
+
+    /// <summary>
+    /// Gets the number of processed images currently available for export or further editing.
+    /// </summary>
+    public int ProcessedCount => ProcessedImages.Count;
 
     /// <summary>
     /// Gets or sets the current status bar text.
@@ -344,14 +405,7 @@ public sealed class MainViewModel : ViewModelBase
     public bool KeepAspectRatio
     {
         get => _keepAspectRatio;
-        set
-        {
-            if (SetProperty(ref _keepAspectRatio, value))
-            {
-                UpdateLinkedDimensionFromCurrentInput();
-                RefreshResizeState();
-            }
-        }
+        set => ApplyResizeMode(value ? "Fit" : "Stretch");
     }
 
     /// <summary>
@@ -392,7 +446,22 @@ public sealed class MainViewModel : ViewModelBase
     public string SelectedResizeMode
     {
         get => _selectedResizeMode;
-        set => SetProperty(ref _selectedResizeMode, value);
+        set => ApplyResizeMode(value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the linked-dimensions resize mode is selected.
+    /// </summary>
+    public bool IsAspectRatioMode
+    {
+        get => string.Equals(SelectedResizeMode, "Fit", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value)
+            {
+                ApplyResizeMode("Fit");
+            }
+        }
     }
 
     /// <summary>
@@ -458,7 +527,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task AddFolderAsync()
     {
-        var folder = _fileDialogService.SelectFolder();
+        var folder = _fileDialogService.SelectFolder("Add Folder");
         if (string.IsNullOrWhiteSpace(folder))
         {
             StatusText = "Ready";
@@ -564,19 +633,25 @@ public sealed class MainViewModel : ViewModelBase
         foreach (var image in selected)
         {
             Images.Remove(image);
+            if (ProcessedImages.Remove(image))
+            {
+                RemovePendingExport(image.FilePath);
+            }
         }
 
         SelectedImages.Clear();
-        SelectedImage = Images.FirstOrDefault();
+        SelectedImage = DisplayedImages.FirstOrDefault();
         StatusText = selected.Length == 0 ? "Ready" : $"Removed {selected.Length} image{(selected.Length == 1 ? string.Empty : "s")}.";
     }
 
     private void ClearList()
     {
         Images.Clear();
+        ProcessedImages.Clear();
         SelectedImages.Clear();
         SelectedImage = null;
         ClearErrors();
+        ClearPendingExports();
         ProgressPercent = 0;
         StatusText = "Ready";
     }
@@ -605,12 +680,6 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task ConvertSelectedAsync()
     {
-        if (RequiresOverwriteConfirmation() && !_userPromptService.ConfirmOverwriteRisk())
-        {
-            StatusText = "Conversion canceled.";
-            return;
-        }
-
         if (!TryParseOutputFormat(SelectedOutputFormat, out var outputFormat))
         {
             AddError($"Unsupported output format: {SelectedOutputFormat}");
@@ -629,29 +698,26 @@ public sealed class MainViewModel : ViewModelBase
             ddsCompression = parsedCompression;
         }
 
-        var requests = SelectedImages
+        var selectedImages = SelectedImages.ToArray();
+        var requests = selectedImages
             .Select(image => new ImageConversionRequest
             {
                 InputPath = image.FilePath,
                 OutputFormat = outputFormat,
-                DdsCompression = ddsCompression
+                DdsCompression = ddsCompression,
+                OutputFolder = CreateBatchStagingDirectory()
             })
             .ToArray();
 
-        await RunBatchAsync(
+        var result = await RunBatchAsync(
             "Convert",
             progress => _imageConversionService.ConvertBatchAsync(requests, progress),
             "conversion");
+        await MoveSuccessfulResultsToProcessedAsync(result, selectedImages);
     }
 
     private async Task ResizeSelectedAsync()
     {
-        if (RequiresOverwriteConfirmation() && !_userPromptService.ConfirmOverwriteRisk())
-        {
-            StatusText = "Resize canceled.";
-            return;
-        }
-
         var width = ParsePositiveInt(ResizeWidth);
         var height = ParsePositiveInt(ResizeHeight);
         var isPercentageResize = IsPercentageResize;
@@ -672,7 +738,8 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         var mode = ParseResizeMode(SelectedResizeMode);
-        var requests = SelectedImages
+        var selectedImages = SelectedImages.ToArray();
+        var requests = selectedImages
             .Select(image => new ImageResizeRequest
             {
                 InputPath = image.FilePath,
@@ -681,22 +748,22 @@ public sealed class MainViewModel : ViewModelBase
                 Height = isPercentageResize ? null : height,
                 Percentage = isPercentageResize ? percentage : null,
                 KeepAspectRatio = isPercentageResize || KeepAspectRatio,
-                Mode = isPercentageResize ? ResizeMode.Fit : mode
+                Mode = isPercentageResize ? ResizeMode.Fit : mode,
+                OutputFolder = CreateBatchStagingDirectory()
             })
             .ToArray();
 
-        await RunBatchAsync(
+        var result = await RunBatchAsync(
             "Resize",
             progress => _imageResizeService.ResizeBatchAsync(requests, progress),
-            "resize",
-            addOutputFiles: true);
+            "resize");
+        await MoveSuccessfulResultsToProcessedAsync(result, selectedImages);
     }
 
-    private async Task RunBatchAsync(
+    private async Task<BatchImageOperationResult?> RunBatchAsync(
         string operationName,
         Func<IProgress<ImageOperationProgress>, Task<BatchImageOperationResult>> operation,
-        string completionNoun,
-        bool addOutputFiles = false)
+        string completionNoun)
     {
         IsBusy = true;
         ProgressPercent = 0;
@@ -716,24 +783,259 @@ public sealed class MainViewModel : ViewModelBase
                 AddError($"{Path.GetFileName(error.InputPath)}: {error.Message}");
             }
 
-            if (addOutputFiles)
-            {
-                await AddOutputFilesAsync(result.SuccessfulResults.Select(success => success.OutputPath));
-            }
-
             StatusText = result.SkippedCount == 0 && result.ErrorCount == 0
                 ? $"Completed {result.SuccessCount} {completionNoun}{(result.SuccessCount == 1 ? string.Empty : "s")}."
                 : $"Completed with {result.SuccessCount} success{(result.SuccessCount == 1 ? string.Empty : "es")}, {result.SkippedCount} skipped, and {result.ErrorCount} error{(result.ErrorCount == 1 ? string.Empty : "s")}.";
+            return result;
         }
         catch (Exception)
         {
             AddError($"{operationName}: The operation could not be completed.");
             StatusText = $"{operationName} failed.";
+            return null;
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    private void ShowSourceImages()
+    {
+        SetActiveImageList(isProcessedListActive: false);
+    }
+
+    private void ShowProcessedImages()
+    {
+        SetActiveImageList(isProcessedListActive: true);
+    }
+
+    private void SetActiveImageList(bool isProcessedListActive)
+    {
+        if (_isProcessedListActive == isProcessedListActive)
+        {
+            return;
+        }
+
+        _isProcessedListActive = isProcessedListActive;
+        SelectedImages.Clear();
+        SelectedImage = null;
+        OnPropertyChanged(nameof(IsProcessedListActive));
+        OnPropertyChanged(nameof(DisplayedImages));
+        OnPropertyChanged(nameof(ActiveListCount));
+        OnPropertyChanged(nameof(ActiveListTitle));
+        RefreshCommandStates();
+    }
+
+    private async Task MoveSuccessfulResultsToProcessedAsync(
+        BatchImageOperationResult? result,
+        IReadOnlyList<ImageFileItem> sourceImages)
+    {
+        if (result is null)
+        {
+            return;
+        }
+
+        var sourceByPath = sourceImages
+            .GroupBy(image => image.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var newItems = new List<(string Path, ImageFileItem Item)>();
+
+        foreach (var success in result.SuccessfulResults)
+        {
+            if (string.IsNullOrWhiteSpace(success.OutputPath) || !File.Exists(success.OutputPath))
+            {
+                continue;
+            }
+
+            if (sourceByPath.TryGetValue(success.InputPath, out var sourceItem))
+            {
+                Images.Remove(sourceItem);
+                if (ProcessedImages.Remove(sourceItem))
+                {
+                    RemovePendingExport(sourceItem.FilePath);
+                }
+
+                SelectedImages.Remove(sourceItem);
+            }
+
+            var processedItem = CreateImageItem(success.OutputPath);
+            ProcessedImages.Add(processedItem);
+            _pendingExportPaths.Add(success.OutputPath);
+            _visibleStagedResults[success.OutputPath] = processedItem;
+            newItems.Add((success.OutputPath, processedItem));
+        }
+
+        if (newItems.Count == 0)
+        {
+            return;
+        }
+
+        ShowProcessedImages();
+        foreach (var (_, item) in newItems)
+        {
+            SelectedImages.Add(item);
+            await PopulateImageItemAsync(item);
+        }
+
+        SelectedImage = newItems[^1].Item;
+        StatusText = $"Ready to export {_pendingExportPaths.Count} image{(_pendingExportPaths.Count == 1 ? string.Empty : "s")}.";
+        RefreshCommandStates();
+    }
+
+    private void RemovePendingExport(string path)
+    {
+        _pendingExportPaths.RemoveAll(candidate =>
+            string.Equals(candidate, path, StringComparison.OrdinalIgnoreCase));
+        _visibleStagedResults.Remove(path);
+    }
+
+    private async Task ExportPendingAsync()
+    {
+        var destinationFolder = _fileDialogService.SelectFolder("Export Images");
+        if (string.IsNullOrWhiteSpace(destinationFolder))
+        {
+            StatusText = "Export canceled.";
+            return;
+        }
+
+        var pendingPaths = _pendingExportPaths.Where(File.Exists).ToArray();
+        if (pendingPaths.Length == 0)
+        {
+            ClearPendingExports();
+            StatusText = "There are no completed images to export.";
+            return;
+        }
+
+        IsBusy = true;
+        ProgressPercent = 0;
+        ClearErrors();
+        var exportedPaths = new List<string>();
+        var exportedFilePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            Directory.CreateDirectory(destinationFolder);
+            for (var index = 0; index < pendingPaths.Length; index++)
+            {
+                var stagedPath = pendingPaths[index];
+                StatusText = $"Exporting {Path.GetFileName(stagedPath)}";
+                var exportPath = GetAvailableExportPath(destinationFolder, Path.GetFileName(stagedPath));
+                await Task.Run(() => File.Copy(stagedPath, exportPath));
+                exportedPaths.Add(stagedPath);
+                exportedFilePaths.Add(stagedPath, exportPath);
+                ProgressPercent = (index + 1) * 100d / pendingPaths.Length;
+            }
+
+            await ReplaceVisibleStagedResultsAsync(exportedFilePaths);
+            _pendingExportPaths.RemoveAll(path => exportedPaths.Contains(path, StringComparer.OrdinalIgnoreCase));
+            StatusText = $"Exported {exportedPaths.Count} image{(exportedPaths.Count == 1 ? string.Empty : "s")}.";
+
+            if (_pendingExportPaths.Count == 0)
+            {
+                ClearPendingExports();
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AddError($"Export: {ex.Message}");
+            StatusText = "Export failed. Choose another folder and try again.";
+        }
+        finally
+        {
+            IsBusy = false;
+            RefreshCommandStates();
+        }
+    }
+
+    /// <summary>
+    /// Removes temporary desktop results when they are no longer needed.
+    /// </summary>
+    public void CleanupPendingExports()
+    {
+        ClearPendingExports();
+    }
+
+    private string CreateBatchStagingDirectory()
+    {
+        var directory = Path.Combine(_pendingExportRoot, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private void ClearPendingExports()
+    {
+        _pendingExportPaths.Clear();
+        _visibleStagedResults.Clear();
+
+        try
+        {
+            if (Directory.Exists(_pendingExportRoot))
+            {
+                Directory.Delete(_pendingExportRoot, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // Temporary files can be released by the operating system after the window closes.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Temporary files can be released by the operating system after the window closes.
+        }
+
+        RefreshCommandStates();
+    }
+
+    private async Task ReplaceVisibleStagedResultsAsync(
+        IReadOnlyDictionary<string, string> exportedFilePaths)
+    {
+        foreach (var (stagedPath, exportPath) in exportedFilePaths)
+        {
+            if (!_visibleStagedResults.Remove(stagedPath, out var stagedItem) ||
+                !ProcessedImages.Contains(stagedItem))
+            {
+                continue;
+            }
+
+            var index = ProcessedImages.IndexOf(stagedItem);
+            var exportedItem = CreateImageItem(exportPath);
+            ProcessedImages[index] = exportedItem;
+
+            var selectedIndex = SelectedImages.IndexOf(stagedItem);
+            if (selectedIndex >= 0)
+            {
+                SelectedImages[selectedIndex] = exportedItem;
+            }
+
+            if (ReferenceEquals(SelectedImage, stagedItem))
+            {
+                SelectedImage = exportedItem;
+            }
+
+            await PopulateImageItemAsync(exportedItem);
+        }
+    }
+
+    private static string GetAvailableExportPath(string destinationFolder, string fileName)
+    {
+        var candidate = Path.Combine(destinationFolder, fileName);
+        if (!File.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        var suffix = 1;
+        do
+        {
+            candidate = Path.Combine(destinationFolder, $"{baseName}_{suffix}{extension}");
+            suffix++;
+        }
+        while (File.Exists(candidate));
+
+        return candidate;
     }
 
     private void OnSelectedImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -748,6 +1050,16 @@ public sealed class MainViewModel : ViewModelBase
     private void OnImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(LoadedCount));
+        OnPropertyChanged(nameof(DisplayedImages));
+        OnPropertyChanged(nameof(ActiveListCount));
+        RefreshCommandStates();
+    }
+
+    private void OnProcessedImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(ProcessedCount));
+        OnPropertyChanged(nameof(DisplayedImages));
+        OnPropertyChanged(nameof(ActiveListCount));
         RefreshCommandStates();
     }
 
@@ -774,6 +1086,9 @@ public sealed class MainViewModel : ViewModelBase
         DropFilesCommand.NotifyCanExecuteChanged();
         ConvertCommand.NotifyCanExecuteChanged();
         ResizeCommand.NotifyCanExecuteChanged();
+        ExportCommand.NotifyCanExecuteChanged();
+        ShowSourceImagesCommand.NotifyCanExecuteChanged();
+        ShowProcessedImagesCommand.NotifyCanExecuteChanged();
     }
 
     private void RefreshResizeState()
@@ -781,34 +1096,6 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanResize));
         OnPropertyChanged(nameof(ResizeEstimateText));
         ResizeCommand.NotifyCanExecuteChanged();
-    }
-
-    private async Task AddOutputFilesAsync(IEnumerable<string?> paths)
-    {
-        var outputPaths = paths
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Cast<string>()
-            .Where(_formatDetector.IsSupported)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (outputPaths.Length == 0)
-        {
-            return;
-        }
-
-        var knownPaths = Images.Select(image => image.FilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in outputPaths)
-        {
-            if (!knownPaths.Add(path))
-            {
-                continue;
-            }
-
-            var item = CreateImageItem(path);
-            Images.Add(item);
-            await PopulateImageItemAsync(item);
-        }
     }
 
     private async Task LoadSelectedPreviewAsync(ImageFileItem? item, int version)
@@ -906,12 +1193,6 @@ public sealed class MainViewModel : ViewModelBase
                 directories.Enqueue(childDirectory);
             }
         }
-    }
-
-    private bool RequiresOverwriteConfirmation()
-    {
-        return _settingsService.Current.Output.ConflictBehavior ==
-            OutputConflictBehavior.OverwriteExistingFiles;
     }
 
     private static ImageFileItem CreateImageItem(string path)
@@ -1082,6 +1363,33 @@ public sealed class MainViewModel : ViewModelBase
         {
             _isUpdatingLinkedDimension = false;
         }
+    }
+
+    private void ApplyResizeMode(string mode)
+    {
+        var normalizedMode = mode is "Stretch" or "Crop" ? mode : "Fit";
+        var modeChanged = SetProperty(ref _selectedResizeMode, normalizedMode, nameof(SelectedResizeMode));
+        var keepAspectRatio = string.Equals(normalizedMode, "Fit", StringComparison.OrdinalIgnoreCase);
+        var aspectChanged = _keepAspectRatio != keepAspectRatio;
+
+        if (aspectChanged)
+        {
+            _keepAspectRatio = keepAspectRatio;
+            OnPropertyChanged(nameof(KeepAspectRatio));
+        }
+
+        if (!modeChanged && !aspectChanged)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(IsAspectRatioMode));
+        if (keepAspectRatio)
+        {
+            UpdateLinkedDimensionFromCurrentInput();
+        }
+
+        RefreshResizeState();
     }
 
     private bool HasValidResizeInput()

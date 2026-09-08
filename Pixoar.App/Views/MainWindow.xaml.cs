@@ -44,4 +44,15 @@ public partial class MainWindow : Window
     {
         SystemCommands.CloseWindow(this);
     }
+
+    /// <inheritdoc />
+    protected override void OnClosed(EventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.CleanupPendingExports();
+        }
+
+        base.OnClosed(e);
+    }
 }

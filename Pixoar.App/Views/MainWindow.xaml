@@ -49,6 +49,9 @@
                 <Button Command="{Binding AddImagesCommand}" Style="{StaticResource PrimaryButtonStyle}" MinHeight="40" Margin="0,0,10,0">
                     <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE710;" Style="{StaticResource IconTextBlockStyle}" FontSize="16" Margin="0,0,8,0" /><TextBlock Text="Add Images" /></StackPanel>
                 </Button>
+                <Button Command="{Binding ExportCommand}" Style="{StaticResource ToolbarButtonStyle}" MinHeight="40">
+                    <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE74E;" Style="{StaticResource IconTextBlockStyle}" Foreground="{StaticResource CyanBrush}" Margin="0,0,8,0" /><TextBlock Text="Export" /></StackPanel>
+                </Button>
                 <Button Command="{Binding AddFolderCommand}" Style="{StaticResource ToolbarButtonStyle}">
                     <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8B7;" Style="{StaticResource IconTextBlockStyle}" Foreground="#FFB36D" Margin="0,0,8,0" /><TextBlock Text="Add Folder" /></StackPanel>
                 </Button>
@@ -70,12 +73,18 @@
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                     <DockPanel LastChildFill="False">
-                        <TextBlock Text="Image List" Style="{StaticResource PageTitleTextBlockStyle}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ActiveListTitle}" Style="{StaticResource PageTitleTextBlockStyle}" VerticalAlignment="Center" />
                         <Border DockPanel.Dock="Right" Background="{StaticResource ElevatedSurfaceBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="11" Padding="11,4" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding LoadedCount, StringFormat={}{0} images}" Style="{StaticResource LabelTextBlockStyle}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding ActiveListCount, StringFormat={}{0} images}" Style="{StaticResource LabelTextBlockStyle}" FontWeight="SemiBold" />
                         </Border>
+                        <Button DockPanel.Dock="Right" Command="{Binding ShowProcessedImagesCommand}" Style="{StaticResource ToolbarButtonStyle}" Padding="10,5" MinHeight="32" Margin="0,0,8,0" ToolTip="Show processed images ready for export.">
+                            <TextBlock Text="{Binding ProcessedCount, StringFormat=Processed ({0})}" />
+                        </Button>
+                        <Button DockPanel.Dock="Right" Command="{Binding ShowSourceImagesCommand}" Style="{StaticResource ToolbarButtonStyle}" Padding="10,5" MinHeight="32" Margin="0,0,8,0" ToolTip="Show original images.">
+                            <TextBlock Text="{Binding LoadedCount, StringFormat=Originals ({0})}" />
+                        </Button>
                     </DockPanel>
-                    <ListView x:Name="ImageList" Grid.Row="2" ItemsSource="{Binding Images}" SelectedItem="{Binding SelectedImage, Mode=TwoWay}" SelectionMode="Extended" behaviors:ListViewSelectionBehavior.SelectedItems="{Binding SelectedImages}">
+                    <ListView x:Name="ImageList" Grid.Row="2" ItemsSource="{Binding DisplayedImages}" SelectedItem="{Binding SelectedImage, Mode=TwoWay}" SelectionMode="Extended" behaviors:ListViewSelectionBehavior.SelectedItems="{Binding SelectedImages}">
                         <ListView.InputBindings><KeyBinding Key="Delete" Command="{Binding RemoveSelectedCommand}" /></ListView.InputBindings>
                         <ListView.View>
                             <GridView>
@@ -109,7 +118,7 @@
                             <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE946;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,7,0" /><TextBlock Text="Info" /></StackPanel>
                         </Button>
                     </DockPanel>
-                    <Border Grid.Row="1" Background="#081629" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8" ToolTip="DDS previews use texconv when available.">
+                    <Border Grid.Row="1" Background="#081629" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8">
                         <Grid>
                             <Image Source="{Binding SelectedImage.PreviewImage}" Stretch="Uniform" Margin="10" Visibility="{Binding SelectedImage.HasPreviewImage, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28" Visibility="{Binding SelectedImage.HasPreviewImage, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
@@ -166,7 +175,7 @@
                         <Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,14,0,0" Visibility="{Binding IsDimensionResize, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="58" /><ColumnDefinition Width="110" /><ColumnDefinition Width="44" /><ColumnDefinition Width="58" /><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                             <TextBlock Text="Width" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" /><TextBox Grid.Column="1" Text="{Binding ResizeWidth, UpdateSourceTrigger=PropertyChanged}" />
-                            <ToggleButton Grid.Column="2" Style="{StaticResource AspectRatioToggleStyle}" IsChecked="{Binding KeepAspectRatio, Mode=TwoWay}" HorizontalAlignment="Center"><TextBlock Text="&#xE71B;" Style="{StaticResource IconTextBlockStyle}" Foreground="{StaticResource CyanBrush}" /></ToggleButton>
+                            <RadioButton Grid.Column="2" Style="{StaticResource AspectRatioRadioStyle}" GroupName="ResizeMode" IsChecked="{Binding IsAspectRatioMode, Mode=TwoWay}" HorizontalAlignment="Center"><TextBlock Text="&#xE71B;" Style="{StaticResource IconTextBlockStyle}" Foreground="{StaticResource CyanBrush}" /></RadioButton>
                             <TextBlock Grid.Column="3" Text="Height" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" /><TextBox Grid.Column="4" Text="{Binding ResizeHeight, UpdateSourceTrigger=PropertyChanged}" />
                             <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="Mode" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" Margin="0,0,12,0" /><RadioButton Content="Stretch" GroupName="ResizeMode" IsChecked="{Binding SelectedResizeMode, Mode=TwoWay, Converter={StaticResource StringEqualsConverter}, ConverterParameter=Stretch}" Margin="0,0,18,0" /><RadioButton Content="Crop" GroupName="ResizeMode" IsChecked="{Binding SelectedResizeMode, Mode=TwoWay, Converter={StaticResource StringEqualsConverter}, ConverterParameter=Crop}" Margin="0" /></StackPanel>
                         </Grid>

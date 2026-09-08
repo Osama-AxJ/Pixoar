@@ -476,7 +476,7 @@ public sealed class SettingsViewModel : ViewModelBase
 
     private void BrowseOutputFolder()
     {
-        var folder = _fileDialogService.SelectFolder();
+        var folder = _fileDialogService.SelectFolder("Choose Output Folder");
         if (!string.IsNullOrWhiteSpace(folder))
         {
             CustomOutputFolder = folder;

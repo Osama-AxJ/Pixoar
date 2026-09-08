@@ -14,6 +14,7 @@ public interface IFileDialogService
     /// <summary>
     /// Shows a folder picker.
     /// </summary>
+    /// <param name="title">The title shown by the folder picker.</param>
     /// <returns>The selected folder path, or null when canceled.</returns>
-    string? SelectFolder();
+    string? SelectFolder(string title = "Select Folder");
 }

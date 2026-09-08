@@ -16,11 +16,11 @@ internal sealed class FileDialogService : IFileDialogService
         return dialog.ShowDialog() == true ? dialog.FileNames : [];
     }
 
-    public string? SelectFolder()
+    public string? SelectFolder(string title = "Select Folder")
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Add Folder"
+            Title = title
         };
 
         return dialog.ShowDialog() == true ? dialog.FolderName : null;
