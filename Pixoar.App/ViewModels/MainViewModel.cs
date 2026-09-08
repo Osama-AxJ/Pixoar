@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Windows.Media;
@@ -38,6 +39,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _selectedResizeMode = "Fit";
     private double _progressPercent;
     private bool _isBusy;
+    private bool _isUpdatingLinkedDimension;
     private int _previewLoadVersion;
 
     /// <summary>
@@ -194,6 +196,7 @@ public sealed class MainViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(HasSelectedImage));
                 ShowImageInformationCommand.NotifyCanExecuteChanged();
+                UpdateLinkedDimensionFromCurrentInput();
                 RefreshResizeState();
                 _ = LoadSelectedPreviewAsync(value, ++_previewLoadVersion);
             }
@@ -313,6 +316,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _resizeWidth, value))
             {
+                UpdateLinkedDimension(isWidthSource: true);
                 RefreshResizeState();
             }
         }
@@ -328,6 +332,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _resizeHeight, value))
             {
+                UpdateLinkedDimension(isWidthSource: false);
                 RefreshResizeState();
             }
         }
@@ -339,7 +344,14 @@ public sealed class MainViewModel : ViewModelBase
     public bool KeepAspectRatio
     {
         get => _keepAspectRatio;
-        set => SetProperty(ref _keepAspectRatio, value);
+        set
+        {
+            if (SetProperty(ref _keepAspectRatio, value))
+            {
+                UpdateLinkedDimensionFromCurrentInput();
+                RefreshResizeState();
+            }
+        }
     }
 
     /// <summary>
@@ -392,7 +404,18 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (!IsPercentageResize)
             {
-                return "Manual dimensions use the selected resize mode.";
+                var outputWidth = ParsePositiveInt(ResizeWidth);
+                var outputHeight = ParsePositiveInt(ResizeHeight);
+                var width = outputWidth;
+                var height = outputHeight;
+                if (outputWidth is not null && outputHeight is not null)
+                {
+                    return $"Output: {outputWidth} x {outputHeight}";
+                }
+
+                return outputWidth is not null && outputHeight is not null
+                    ? $"Output: {width} × {height}"
+                    : "Enter a width or height to calculate the output.";
             }
 
             if (!TryParsePercentage(SelectedResizePercentage, out var percentage))
@@ -406,11 +429,11 @@ public sealed class MainViewModel : ViewModelBase
             }
 
             var image = SelectedImage ?? SelectedImages.FirstOrDefault();
-            if (image is not null && TryParseResolution(image.Resolution, out var width, out var height))
+            if (image is not null && TryParseResolution(image.Resolution, out var sourceWidth, out var sourceHeight))
             {
                 var scale = percentage / 100d;
-                var outputWidth = Math.Max(1, (int)Math.Round(width * scale));
-                var outputHeight = Math.Max(1, (int)Math.Round(height * scale));
+                var outputWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
+                var outputHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
                 return $"Output: {outputWidth}x{outputHeight}";
             }
 
@@ -717,6 +740,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(SelectedCount));
+        UpdateLinkedDimensionFromCurrentInput();
         RefreshResizeState();
         RefreshCommandStates();
     }
@@ -1006,6 +1030,58 @@ public sealed class MainViewModel : ViewModelBase
     private static int? ParsePositiveInt(string value)
     {
         return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : null;
+    }
+
+    private void UpdateLinkedDimensionFromCurrentInput()
+    {
+        if (ParsePositiveInt(ResizeWidth) is not null)
+        {
+            UpdateLinkedDimension(isWidthSource: true);
+            return;
+        }
+
+        UpdateLinkedDimension(isWidthSource: false);
+    }
+
+    private void UpdateLinkedDimension(bool isWidthSource)
+    {
+        if (_isUpdatingLinkedDimension || !KeepAspectRatio || !IsDimensionResize)
+        {
+            return;
+        }
+
+        var image = SelectedImages.FirstOrDefault() ?? SelectedImage;
+        if (image is null || !TryParseResolution(image.Resolution, out var sourceWidth, out var sourceHeight))
+        {
+            return;
+        }
+
+        var sourceValue = ParsePositiveInt(isWidthSource ? ResizeWidth : ResizeHeight);
+        if (sourceValue is null)
+        {
+            return;
+        }
+
+        var calculatedValue = isWidthSource
+            ? Math.Max(1, (int)Math.Round(sourceValue.Value * (double)sourceHeight / sourceWidth))
+            : Math.Max(1, (int)Math.Round(sourceValue.Value * (double)sourceWidth / sourceHeight));
+
+        _isUpdatingLinkedDimension = true;
+        try
+        {
+            if (isWidthSource)
+            {
+                ResizeHeight = calculatedValue.ToString(CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                ResizeWidth = calculatedValue.ToString(CultureInfo.InvariantCulture);
+            }
+        }
+        finally
+        {
+            _isUpdatingLinkedDimension = false;
+        }
     }
 
     private bool HasValidResizeInput()

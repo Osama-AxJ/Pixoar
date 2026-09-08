@@ -33,4 +33,25 @@ public partial class SettingsWindow : Window
         _contextMenuStatusLoaded = true;
         await ((SettingsViewModel)DataContext).LoadContextMenuInstallationStatusAsync();
     }
+
+    private void MinimizeWindow_Click(object sender, RoutedEventArgs e)
+    {
+        SystemCommands.MinimizeWindow(this);
+    }
+
+    private void ToggleMaximizeWindow_Click(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            SystemCommands.RestoreWindow(this);
+            return;
+        }
+
+        SystemCommands.MaximizeWindow(this);
+    }
+
+    private void CloseWindow_Click(object sender, RoutedEventArgs e)
+    {
+        SystemCommands.CloseWindow(this);
+    }
 }
