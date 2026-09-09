@@ -23,6 +23,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IImageFormatDetector _formatDetector;
     private readonly IImageInfoService _imageInfoService;
     private readonly IImagePreviewService _imagePreviewService;
+    private readonly IDdsService _ddsService;
     private readonly IImageConversionService _imageConversionService;
     private readonly IImageResizeService _imageResizeService;
     private readonly ISettingsService _settingsService;
@@ -42,13 +43,16 @@ public sealed class MainViewModel : ViewModelBase
     private string _resizeHeight = string.Empty;
     private bool _keepAspectRatio = true;
     private string _selectedResizeMethod = "By Dimensions";
-    private string _selectedResizePercentage = "50%";
+    private string _selectedResizePercentage = "50";
     private string _selectedResizeMode = "Fit";
     private double _progressPercent;
     private bool _isBusy;
     private bool _isUpdatingLinkedDimension;
     private bool _isProcessedListActive;
     private int _previewLoadVersion;
+    private CancellationTokenSource? _previewCancellation;
+    private IReadOnlyList<DdsMipLevel>? _availableMipLevels;
+    private bool _canShowMipChain;
     private ImageListSortColumn? _activeImageSortColumn;
     private bool _isImageSortAscending = true;
 
@@ -61,6 +65,7 @@ public sealed class MainViewModel : ViewModelBase
         IImageFormatDetector formatDetector,
         IImageInfoService imageInfoService,
         IImagePreviewService imagePreviewService,
+        IDdsService ddsService,
         IImageConversionService imageConversionService,
         IImageResizeService imageResizeService,
         ISettingsService settingsService)
@@ -70,6 +75,7 @@ public sealed class MainViewModel : ViewModelBase
         _formatDetector = formatDetector;
         _imageInfoService = imageInfoService;
         _imagePreviewService = imagePreviewService;
+        _ddsService = ddsService;
         _imageConversionService = imageConversionService;
         _imageResizeService = imageResizeService;
         _settingsService = settingsService;
@@ -80,7 +86,6 @@ public sealed class MainViewModel : ViewModelBase
         DdsCompressionOptions = ["DXT1", "DXT3", "DXT5", "BC7", "Uncompressed"];
         _selectedDdsCompression = FormatDdsCompression(settingsService.Current.Dds.Compression);
         ResizeMethods = ["By Dimensions", "By Percentage"];
-        ResizePercentages = ["50%", "75%"];
         ResizeModes = ["Stretch", "Crop", "Fit"];
 
         AddImagesCommand = new AsyncRelayCommand(_ => AddImagesAsync(), _ => !IsBusy);
@@ -91,6 +96,9 @@ public sealed class MainViewModel : ViewModelBase
             _ => (Images.Count > 0 || ProcessedImages.Count > 0) && !IsBusy);
         OpenSettingsCommand = new RelayCommand(_ => OpenSettings(), _ => !IsBusy);
         ShowImageInformationCommand = new AsyncRelayCommand(_ => ShowImageInformationAsync(), _ => SelectedImage is not null && !IsBusy);
+        ToggleMipChainCommand = new AsyncRelayCommand(_ => ToggleMipChainAsync(), _ => CanShowMipChain && !IsBusy);
+        ShowMipPreviewCommand = new RelayCommand(parameter => ShowMipPreview(parameter as DdsMipPreviewItem), _ => !IsBusy);
+        ShowSelectedPreviewCommand = new RelayCommand(_ => ShowSelectedPreview(), _ => SelectedImage?.HasPreviewImage == true && !IsBusy);
         DropFilesCommand = new AsyncRelayCommand(AddDroppedPathsAsync, _ => !IsBusy);
         ConvertCommand = new AsyncRelayCommand(_ => ConvertSelectedAsync(), _ => HasSelection && !IsBusy);
         ResizeCommand = new AsyncRelayCommand(_ => ResizeSelectedAsync(), _ => CanResize);
@@ -125,6 +133,26 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<ImageFileItem> SelectedImages { get; } = [];
 
     /// <summary>
+    /// Gets the actual stored mip previews for the currently selected DDS, when it has more than one mip.
+    /// </summary>
+    public ObservableCollection<DdsMipPreviewItem> PreviewMipmaps { get; } = [];
+
+    /// <summary>
+    /// Gets the command that toggles the current DDS mip-chain viewer.
+    /// </summary>
+    public AsyncRelayCommand ToggleMipChainCommand { get; }
+
+    /// <summary>
+    /// Gets the command that opens a mip in the larger inspection window.
+    /// </summary>
+    public RelayCommand ShowMipPreviewCommand { get; }
+
+    /// <summary>
+    /// Gets the command that opens the selected image in the zoomable inspection window.
+    /// </summary>
+    public RelayCommand ShowSelectedPreviewCommand { get; }
+
+    /// <summary>
     /// Gets completed images that are ready for export or further editing.
     /// </summary>
     public ObservableCollection<ImageFileItem> ProcessedImages { get; } = [];
@@ -148,11 +176,6 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets the resize methods shown by the resize panel.
     /// </summary>
     public IReadOnlyList<string> ResizeMethods { get; }
-
-    /// <summary>
-    /// Gets the percentage resize choices shown by the resize panel.
-    /// </summary>
-    public IReadOnlyList<string> ResizePercentages { get; }
 
     /// <summary>
     /// Gets the resize modes shown by the resize panel.
@@ -275,11 +298,17 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _selectedImage, value))
             {
+                _previewCancellation?.Cancel();
+                _previewCancellation?.Dispose();
+                _previewCancellation = new CancellationTokenSource();
+                ClearMipPreviews();
+                SetMipChainAvailability(null);
                 OnPropertyChanged(nameof(HasSelectedImage));
                 ShowImageInformationCommand.NotifyCanExecuteChanged();
+                ShowSelectedPreviewCommand.NotifyCanExecuteChanged();
                 UpdateLinkedDimensionFromCurrentInput();
                 RefreshResizeState();
-                _ = LoadSelectedPreviewAsync(value, ++_previewLoadVersion);
+                _ = LoadSelectedPreviewAsync(value, ++_previewLoadVersion, _previewCancellation.Token);
             }
         }
     }
@@ -298,6 +327,21 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets a value indicating whether the preview panel has a selected image.
     /// </summary>
     public bool HasSelectedImage => SelectedImage is not null;
+
+    /// <summary>
+    /// Gets a value indicating whether the preview card is showing a DDS mip chain.
+    /// </summary>
+    public bool HasMipChain => PreviewMipmaps.Count > 1;
+
+    /// <summary>
+    /// Gets a value indicating whether the selected DDS contains a mip chain that can be displayed.
+    /// </summary>
+    public bool CanShowMipChain => _canShowMipChain;
+
+    /// <summary>
+    /// Gets the action label for the mip-chain button.
+    /// </summary>
+    public string MipChainButtonText => HasMipChain ? "Hide Mips" : "Show Mips";
 
     /// <summary>
     /// Gets a value indicating whether the current resize settings can be submitted.
@@ -519,7 +563,7 @@ public sealed class MainViewModel : ViewModelBase
 
             if (!TryParsePercentage(SelectedResizePercentage, out var percentage))
             {
-                return "Choose a valid percentage.";
+                return "Enter a valid percentage.";
             }
 
             if (SelectedImages.Count > 1)
@@ -764,7 +808,7 @@ public sealed class MainViewModel : ViewModelBase
 
         if (isPercentageResize && !TryParsePercentage(SelectedResizePercentage, out percentage))
         {
-            AddError("Choose a valid resize percentage.");
+            AddError("Enter a valid resize percentage.");
             StatusText = "Resize needs a percentage.";
             return;
         }
@@ -1196,6 +1240,9 @@ public sealed class MainViewModel : ViewModelBase
         ClearListCommand.NotifyCanExecuteChanged();
         OpenSettingsCommand.NotifyCanExecuteChanged();
         ShowImageInformationCommand.NotifyCanExecuteChanged();
+        ToggleMipChainCommand.NotifyCanExecuteChanged();
+        ShowMipPreviewCommand.NotifyCanExecuteChanged();
+        ShowSelectedPreviewCommand.NotifyCanExecuteChanged();
         DropFilesCommand.NotifyCanExecuteChanged();
         ConvertCommand.NotifyCanExecuteChanged();
         ResizeCommand.NotifyCanExecuteChanged();
@@ -1211,26 +1258,59 @@ public sealed class MainViewModel : ViewModelBase
         ResizeCommand.NotifyCanExecuteChanged();
     }
 
-    private async Task LoadSelectedPreviewAsync(ImageFileItem? item, int version)
+    private async Task LoadSelectedPreviewAsync(ImageFileItem? item, int version, CancellationToken cancellationToken)
     {
-        if (item is null || item.HasPreviewImage)
+        if (item is null)
         {
             return;
         }
 
         try
         {
-            var preview = await _imagePreviewService.LoadPreviewAsync(item.FilePath, 900);
-            if (version != _previewLoadVersion || SelectedImage != item)
+            Task<IReadOnlyList<DdsMipLevel>>? mipLevelsTask = item.IsDds
+                ? _ddsService.GetMipLevelsAsync(item.FilePath, cancellationToken)
+                : null;
+
+            if (!item.HasPreviewImage)
+            {
+                var preview = await _imagePreviewService.LoadPreviewAsync(item.FilePath, 900, cancellationToken);
+                if (version != _previewLoadVersion || SelectedImage != item || cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                item.PreviewImage = CreateBitmapImage(preview.PngBytes);
+                ShowSelectedPreviewCommand.NotifyCanExecuteChanged();
+                if (preview.IsPlaceholder && !string.IsNullOrWhiteSpace(preview.Message))
+                {
+                    AddError($"{item.FileName}: {preview.Message}");
+                }
+            }
+
+            if (mipLevelsTask is null)
             {
                 return;
             }
 
-            item.PreviewImage = CreateBitmapImage(preview.PngBytes);
-            if (preview.IsPlaceholder && !string.IsNullOrWhiteSpace(preview.Message))
+            try
             {
-                AddError($"{item.FileName}: {preview.Message}");
+                var mipLevels = await mipLevelsTask;
+                if (version == _previewLoadVersion && SelectedImage == item && !cancellationToken.IsCancellationRequested)
+                {
+                    SetMipChainAvailability(mipLevels.Count > 1 ? mipLevels : null);
+                }
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                if (version == _previewLoadVersion && SelectedImage == item)
+                {
+                    AddError($"{item.FileName}: DDS mip chain could not be read.");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A new selection owns the preview card now.
         }
         catch (Exception)
         {
@@ -1480,6 +1560,116 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    private async Task ToggleMipChainAsync()
+    {
+        if (HasMipChain)
+        {
+            ClearMipPreviews();
+            return;
+        }
+
+        var item = SelectedImage;
+        var mipLevels = _availableMipLevels;
+        if (item is null || mipLevels is not { Count: > 1 })
+        {
+            return;
+        }
+
+        var version = _previewLoadVersion;
+        var cancellationToken = _previewCancellation?.Token ?? CancellationToken.None;
+        var baseDimension = Math.Max(mipLevels[0].Width, mipLevels[0].Height);
+        foreach (var mip in mipLevels)
+        {
+            PreviewMipmaps.Add(CreateMipPreviewItem(mip, baseDimension));
+        }
+
+        OnPropertyChanged(nameof(HasMipChain));
+        OnPropertyChanged(nameof(MipChainButtonText));
+        await Task.WhenAll(PreviewMipmaps.Select(mip => LoadMipPreviewAsync(item, mip, version, cancellationToken)));
+    }
+
+    private void ShowMipPreview(DdsMipPreviewItem? mip)
+    {
+        if (mip?.HasImage == true)
+        {
+            _windowService.ShowImagePreview(
+                mip.Image!,
+                $"{mip.Label} Preview",
+                mip.Resolution,
+                mip.ScalingMode);
+        }
+    }
+
+    private void ShowSelectedPreview()
+    {
+        if (SelectedImage?.PreviewImage is { } image)
+        {
+            _windowService.ShowImagePreview(
+                image,
+                $"{SelectedImage.FileName} Preview",
+                SelectedImage.Resolution,
+                BitmapScalingMode.HighQuality);
+        }
+    }
+
+    private void SetMipChainAvailability(IReadOnlyList<DdsMipLevel>? mipLevels)
+    {
+        _availableMipLevels = mipLevels;
+        _canShowMipChain = mipLevels is { Count: > 1 };
+        OnPropertyChanged(nameof(CanShowMipChain));
+        ToggleMipChainCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task LoadMipPreviewAsync(
+        ImageFileItem item,
+        DdsMipPreviewItem mip,
+        int version,
+        CancellationToken cancellationToken)
+    {
+        var preview = await _ddsService.LoadMipPreviewAsync(item.FilePath, mip.Level, 900, cancellationToken);
+        if (version != _previewLoadVersion || SelectedImage != item || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        mip.Image = CreateBitmapImage(preview.PngBytes);
+        ShowMipPreviewCommand.NotifyCanExecuteChanged();
+        if (preview.IsPlaceholder && !string.IsNullOrWhiteSpace(preview.Message))
+        {
+            AddError($"{item.FileName}, Mip {mip.Level}: {preview.Message}");
+        }
+    }
+
+    private static DdsMipPreviewItem CreateMipPreviewItem(DdsMipLevel mip, int baseDimension)
+    {
+        const double maximumDisplaySize = 260;
+        const double minimumDisplaySize = 52;
+        var mipDimension = Math.Max(mip.Width, mip.Height);
+        var relativeSize = maximumDisplaySize * Math.Sqrt(mipDimension / (double)Math.Max(1, baseDimension));
+        var displaySize = Math.Clamp(relativeSize, minimumDisplaySize, maximumDisplaySize);
+        return new DdsMipPreviewItem
+        {
+            Level = mip.Level,
+            PixelWidth = mip.Width,
+            PixelHeight = mip.Height,
+            DisplayWidth = displaySize * mip.Width / mipDimension,
+            DisplayHeight = displaySize * mip.Height / mipDimension,
+            ScalingMode = mipDimension <= 32 ? BitmapScalingMode.NearestNeighbor : BitmapScalingMode.HighQuality
+        };
+    }
+
+    private void ClearMipPreviews()
+    {
+        if (PreviewMipmaps.Count == 0)
+        {
+            return;
+        }
+
+        PreviewMipmaps.Clear();
+        OnPropertyChanged(nameof(HasMipChain));
+        OnPropertyChanged(nameof(MipChainButtonText));
+    }
+
     private void ApplyResizeMode(string mode)
     {
         var normalizedMode = mode is "Stretch" or "Crop" ? mode : "Fit";
@@ -1518,7 +1708,6 @@ public sealed class MainViewModel : ViewModelBase
     {
         var trimmed = value.Trim();
         return int.TryParse(trimmed.TrimEnd('%'), out percentage)
-            && trimmed.EndsWith('%')
             && percentage > 0;
     }
 

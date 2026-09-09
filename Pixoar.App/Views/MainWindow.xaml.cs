@@ -24,6 +24,20 @@ public partial class MainWindow : Window
         ImageList.Focus();
     }
 
+    private void MipChainScrollLeft_Click(object sender, RoutedEventArgs e)
+    {
+        MipChainScrollViewer.ScrollToHorizontalOffset(
+            Math.Max(0, MipChainScrollViewer.HorizontalOffset - (MipChainScrollViewer.ViewportWidth * 0.8)));
+    }
+
+    private void MipChainScrollRight_Click(object sender, RoutedEventArgs e)
+    {
+        MipChainScrollViewer.ScrollToHorizontalOffset(
+            Math.Min(
+                MipChainScrollViewer.ScrollableWidth,
+                MipChainScrollViewer.HorizontalOffset + (MipChainScrollViewer.ViewportWidth * 0.8)));
+    }
+
     private void MinimizeWindow_Click(object sender, RoutedEventArgs e)
     {
         SystemCommands.MinimizeWindow(this);

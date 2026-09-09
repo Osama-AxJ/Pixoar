@@ -63,6 +63,22 @@ public interface IDdsService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the dimensions of every mip surface actually stored in a DDS file.
+    /// </summary>
+    Task<IReadOnlyList<DdsMipLevel>> GetMipLevelsAsync(
+        string inputPath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Decodes one actual stored DDS mip surface to a PNG preview.
+    /// </summary>
+    Task<ImagePreviewResult> LoadMipPreviewAsync(
+        string inputPath,
+        int mipLevel,
+        int maxPixelSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Reads DDS metadata when possible.
     /// </summary>
     /// <param name="inputPath">The DDS input path.</param>

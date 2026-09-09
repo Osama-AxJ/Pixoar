@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using Pixoar.App.Models;
 using Pixoar.App.ViewModels;
@@ -24,6 +25,19 @@ internal sealed class WindowService(IServiceProvider serviceProvider) : IWindowS
         var window = serviceProvider.GetRequiredService<ImageInformationWindow>();
         window.DataContext = viewModel;
         window.Owner = Application.Current.MainWindow;
+        window.ShowDialog();
+    }
+
+    public void ShowImagePreview(
+        ImageSource image,
+        string title,
+        string resolution,
+        BitmapScalingMode scalingMode)
+    {
+        var window = new MipPreviewWindow(image, title, resolution, scalingMode)
+        {
+            Owner = Application.Current.MainWindow
+        };
         window.ShowDialog();
     }
 }

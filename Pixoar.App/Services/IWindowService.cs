@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using Pixoar.App.Models;
 
 namespace Pixoar.App.Services;
@@ -19,4 +20,13 @@ public interface IWindowService
     /// <param name="image">The image entry to inspect.</param>
     /// <returns>A task that completes when the dialog has been prepared.</returns>
     Task ShowImageInformationAsync(ImageFileItem image);
+
+    /// <summary>
+    /// Opens a zoomable image inspection window.
+    /// </summary>
+    void ShowImagePreview(
+        ImageSource image,
+        string title,
+        string resolution,
+        BitmapScalingMode scalingMode);
 }

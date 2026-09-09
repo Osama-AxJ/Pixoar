@@ -483,13 +483,14 @@
                 <ControlTemplate TargetType="{x:Type ScrollBar}">
                     <Border Margin="2,4" Background="#0A172A" CornerRadius="5">
                         <Track x:Name="PART_Track"
+                               Orientation="Vertical"
                                IsDirectionReversed="True"
                                Maximum="{TemplateBinding Maximum}"
                                Minimum="{TemplateBinding Minimum}"
                                Value="{TemplateBinding Value}"
                                ViewportSize="{TemplateBinding ViewportSize}">
                             <Track.DecreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.PageUpCommand"
+                                <RepeatButton x:Name="DecreaseButton" Command="ScrollBar.PageUpCommand"
                                               CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                               Background="Transparent"
                                               BorderThickness="0" />
@@ -508,13 +509,23 @@
                                 </Thumb>
                             </Track.Thumb>
                             <Track.IncreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.PageDownCommand"
+                                <RepeatButton x:Name="IncreaseButton" Command="ScrollBar.PageDownCommand"
                                               CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                               Background="Transparent"
                                               BorderThickness="0" />
                             </Track.IncreaseRepeatButton>
                         </Track>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter Property="Width" Value="Auto" />
+                            <Setter Property="Height" Value="10" />
+                            <Setter TargetName="PART_Track" Property="Orientation" Value="Horizontal" />
+                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                            <Setter TargetName="DecreaseButton" Property="Command" Value="{x:Static ScrollBar.PageLeftCommand}" />
+                            <Setter TargetName="IncreaseButton" Property="Command" Value="{x:Static ScrollBar.PageRightCommand}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

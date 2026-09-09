@@ -87,6 +87,11 @@ static async Task RunAsync(string runRoot)
         dds,
         ddsDependency.ResolveTexconvPath()
             ?? throw new InvalidOperationException(ddsDependency.MissingTexconvMessage));
+    await VerifyDdsMipPreviewAsync(
+        runRoot,
+        dds,
+        ddsDependency.ResolveTexconvPath()
+            ?? throw new InvalidOperationException(ddsDependency.MissingTexconvMessage));
     await VerifyDefaultQualityBiasAsync(runRoot, settings, conversion);
 }
 
@@ -452,6 +457,123 @@ static async Task VerifyDdsPipelineAsync(
 
     Console.WriteLine(
         "PASS DDS pipeline: exact texconv switches, direct-header parity, Texture2D flags, colors, and legacy DXT Explorer thumbnails verified.");
+}
+
+static async Task VerifyDdsMipPreviewAsync(
+    string runRoot,
+    IDdsService dds,
+    string texconvPath)
+{
+    var previewRoot = Path.Combine(runRoot, "DdsMipPreview");
+    Directory.CreateDirectory(previewRoot);
+
+    // The colors deliberately differ between stored surfaces. This proves the
+    // preview does not derive lower mips by resizing mip zero.
+    var actualSurfacePath = CreateActualMipFixture(Path.Combine(previewRoot, "actual-surfaces.dds"));
+    var actualLevels = await dds.GetMipLevelsAsync(actualSurfacePath);
+    Assert(
+        actualLevels.Select(level => (level.Width, level.Height)).SequenceEqual([(5, 3), (2, 1), (1, 1)]),
+        "DDS mip metadata did not retain the actual rectangular NPOT mip dimensions.");
+
+    var expectedColors = new[]
+    {
+        new byte[] { 240, 20, 30, 255 },
+        new byte[] { 25, 220, 45, 255 },
+        new byte[] { 35, 50, 235, 255 }
+    };
+    for (var level = 0; level < actualLevels.Count; level++)
+    {
+        var result = await dds.LoadMipPreviewAsync(actualSurfacePath, level, 64);
+        Assert(!result.IsPlaceholder && result.PngBytes is { Length: > 0 }, $"Stored mip {level} did not decode.");
+        using var image = new MagickImage(result.PngBytes!);
+        var sample = InspectImage(image);
+        Assert(
+            MaximumDeltaFromColor(expectedColors[level], sample.Pixels) <= 1,
+            $"Mip {level} preview did not use its actual stored surface. " +
+            $"Expected {string.Join(',', expectedColors[level])}, got {string.Join(',', sample.Pixels.Take(4))}.");
+    }
+
+    var sourcePath = CreateColorChart(Path.Combine(previewRoot, "compressed-source.png"));
+    DdsCase[] cases =
+    [
+        new(DdsCompressionMode.Dxt1, "DXT1", "BC1_UNORM", "DXT1", null, true),
+        new(DdsCompressionMode.Dxt3, "DXT3", "BC2_UNORM", "DXT3", null, true),
+        new(DdsCompressionMode.Dxt5, "DXT5", "BC3_UNORM", "DXT5", null, true),
+        new(DdsCompressionMode.Bc7, "BC7", "BC7_UNORM_SRGB", "DX10", 99, false),
+        new(DdsCompressionMode.Uncompressed, "RGBA", "R8G8B8A8_UNORM", "\0\0\0\0", null, false)
+    ];
+    foreach (var testCase in cases)
+    {
+        var caseRoot = Path.Combine(previewRoot, testCase.Name);
+        Directory.CreateDirectory(caseRoot);
+        var arguments = new List<string> { "-y", "-m", "3" };
+        if (testCase.DxgiFormat is null)
+        {
+            arguments.Add("--ignore-srgb");
+            arguments.Add("-dx9");
+        }
+        else
+        {
+            arguments.Add("-srgb");
+        }
+
+        arguments.Add("-ft");
+        arguments.Add("dds");
+        arguments.Add("-f");
+        arguments.Add(testCase.TexconvFormat);
+        arguments.Add("-o");
+        arguments.Add(caseRoot);
+        arguments.Add(sourcePath);
+        await RunTexconvAsync(texconvPath, arguments);
+
+        var path = Path.Combine(caseRoot, $"{Path.GetFileNameWithoutExtension(sourcePath)}.dds");
+        var levels = await dds.GetMipLevelsAsync(path);
+        Assert(levels.Count == 3, $"{testCase.Name} did not expose its three stored mip levels.");
+        foreach (var level in levels)
+        {
+            var preview = await dds.LoadMipPreviewAsync(path, level.Level, 96);
+            Assert(!preview.IsPlaceholder && preview.PngBytes is { Length: > 0 }, $"{testCase.Name} mip {level.Level} did not decode.");
+        }
+    }
+
+    Console.WriteLine("PASS DDS mip preview: actual stored surfaces, rectangular dimensions, and DXT1/DXT3/DXT5/BC7/RGBA chains decoded.");
+}
+
+static string CreateActualMipFixture(string path)
+{
+    var bytes = new byte[128 + (5 * 3 * 4) + (2 * 1 * 4) + 4];
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes, 0x20534444);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), 124);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8), 0x0002100F);
+    BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(12), 3);
+    BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(16), 5);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(20), 20);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(28), 3);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(76), 32);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(80), 0x00000041);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(88), 32);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(92), 0x000000FF);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(96), 0x0000FF00);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(100), 0x00FF0000);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(104), 0xFF000000);
+    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(108), 0x00401008);
+
+    FillRgba(bytes.AsSpan(128, 5 * 3 * 4), 240, 20, 30);
+    FillRgba(bytes.AsSpan(128 + (5 * 3 * 4), 2 * 1 * 4), 25, 220, 45);
+    FillRgba(bytes.AsSpan(128 + (5 * 3 * 4) + (2 * 1 * 4), 4), 35, 50, 235);
+    File.WriteAllBytes(path, bytes);
+    return path;
+}
+
+static void FillRgba(Span<byte> destination, byte red, byte green, byte blue)
+{
+    for (var index = 0; index < destination.Length; index += 4)
+    {
+        destination[index] = red;
+        destination[index + 1] = green;
+        destination[index + 2] = blue;
+        destination[index + 3] = byte.MaxValue;
+    }
 }
 
 static async Task VerifyDefaultQualityBiasAsync(

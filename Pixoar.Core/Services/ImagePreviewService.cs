@@ -84,7 +84,10 @@ internal sealed class ImagePreviewService(
         using var image = new MagickImage(path);
         image.AutoOrient();
         ImageColorManagement.NormalizeToSrgb(image);
-        image.Thumbnail(new MagickGeometry((uint)maxPixelSize, (uint)maxPixelSize));
+        if (image.Width > (uint)maxPixelSize || image.Height > (uint)maxPixelSize)
+        {
+            image.Thumbnail(new MagickGeometry((uint)maxPixelSize, (uint)maxPixelSize));
+        }
         image.Format = MagickFormat.Png;
         return image.ToByteArray();
     }

@@ -1,0 +1,52 @@
+<Window x:Class="Pixoar.App.Views.MipPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mip Preview"
+        Width="760"
+        Height="650"
+        MinWidth="420"
+        MinHeight="360"
+        Icon="/Resources/Assets/Branding/pixoar.ico"
+        WindowStartupLocation="CenterOwner"
+        WindowState="Maximized"
+        Background="{StaticResource AppBackgroundBrush}">
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitleTextBlockStyle}" />
+                <TextBlock Text="{Binding Resolution}" Style="{StaticResource MutedTextBlockStyle}" Margin="0,4,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Command="{Binding ZoomOutCommand}" Content="−" ToolTip="Zoom out" Width="42" Height="38" Padding="0" />
+                <Border Width="68" Height="38" Margin="8,0" Background="{StaticResource SurfaceAltBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="7">
+                    <TextBlock Text="{Binding ZoomText}" TextAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <Button Command="{Binding ZoomInCommand}" Content="+" ToolTip="Zoom in" Width="42" Height="38" Padding="0" />
+                <Button Command="{Binding ResetZoomCommand}" Content="Reset" ToolTip="Reset zoom to 100%" Width="68" Height="38" Margin="10,0,0,0" Padding="0" />
+            </StackPanel>
+        </Grid>
+        <Border Grid.Row="1" Background="#081629" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8">
+            <ScrollViewer x:Name="PreviewScrollViewer"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          PanningMode="Both"
+                          Cursor="Hand"
+                          PreviewMouseWheel="PreviewScrollViewer_PreviewMouseWheel"
+                          PreviewMouseLeftButtonDown="PreviewScrollViewer_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="PreviewScrollViewer_PreviewMouseMove"
+                          PreviewMouseLeftButtonUp="PreviewScrollViewer_PreviewMouseLeftButtonUp">
+                <Image Source="{Binding Image}" Width="{Binding ZoomedWidth}" Height="{Binding ZoomedHeight}" Stretch="Fill" RenderOptions.BitmapScalingMode="{Binding ScalingMode}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="18" />
+            </ScrollViewer>
+        </Border>
+        <Button Grid.Row="2" Content="Close" IsCancel="True" HorizontalAlignment="Right" MinWidth="96" Margin="0,18,0,0" />
+    </Grid>
+</Window>

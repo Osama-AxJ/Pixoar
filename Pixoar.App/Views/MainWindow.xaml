@@ -120,20 +120,63 @@
             <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" MinHeight="166" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                    <DockPanel Margin="0,0,0,14">
+                    <DockPanel Margin="0,0,0,14" LastChildFill="False">
                         <TextBlock Text="Preview" Style="{StaticResource PageTitleTextBlockStyle}" VerticalAlignment="Center" />
                         <Button DockPanel.Dock="Right" Command="{Binding ShowImageInformationCommand}" VerticalAlignment="Center" Padding="12,6" MinHeight="34" Margin="10,0,0,0">
                             <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE946;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,7,0" /><TextBlock Text="Info" /></StackPanel>
                         </Button>
+                        <Button DockPanel.Dock="Right" Command="{Binding ToggleMipChainCommand}" VerticalAlignment="Center" Padding="12,6" MinHeight="34" Visibility="{Binding CanShowMipChain, Converter={StaticResource BooleanToVisibilityConverter}}" ToolTip="Show the stored DDS mip levels.">
+                            <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8A5;" Style="{StaticResource IconTextBlockStyle}" Margin="0,0,7,0" /><TextBlock Text="{Binding MipChainButtonText}" /></StackPanel>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Click="MipChainScrollRight_Click" Width="42" Height="36" Padding="0" Margin="4,0,0,0" Visibility="{Binding HasMipChain, Converter={StaticResource BooleanToVisibilityConverter}}" ToolTip="Show later mip levels.">
+                            <TextBlock Text="&#xE76C;" Style="{StaticResource IconTextBlockStyle}" />
+                        </Button>
+                        <Button DockPanel.Dock="Right" Click="MipChainScrollLeft_Click" Width="42" Height="36" Padding="0" Margin="4,0,0,0" Visibility="{Binding HasMipChain, Converter={StaticResource BooleanToVisibilityConverter}}" ToolTip="Show earlier mip levels.">
+                            <TextBlock Text="&#xE76B;" Style="{StaticResource IconTextBlockStyle}" />
+                        </Button>
                     </DockPanel>
                     <Border Grid.Row="1" Background="#081629" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8">
                         <Grid>
-                            <Image Source="{Binding SelectedImage.PreviewImage}" Stretch="Uniform" Margin="10" Visibility="{Binding SelectedImage.HasPreviewImage, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28" Visibility="{Binding SelectedImage.HasPreviewImage, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
-                                <TextBlock Text="{Binding SelectedImage.PreviewGlyph, TargetNullValue=&#xE91B;}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="52" Foreground="{StaticResource SubtleTextBrush}" HorizontalAlignment="Center" />
-                                <TextBlock Text="{Binding SelectedImage.FileName, TargetNullValue=Drop images to begin}" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,12,0,0" />
-                                <TextBlock Text="{Binding SelectedImage.Resolution, TargetNullValue=Select an image to preview}" Style="{StaticResource MutedTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
-                            </StackPanel>
+                            <Grid Visibility="{Binding HasMipChain, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                <Button Command="{Binding ShowSelectedPreviewCommand}" Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" ToolTip="Open a larger zoomable preview." Visibility="{Binding SelectedImage.HasPreviewImage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Image Source="{Binding SelectedImage.PreviewImage}" Stretch="Uniform" Margin="10" />
+                                </Button>
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28" Visibility="{Binding SelectedImage.HasPreviewImage, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                    <TextBlock Text="{Binding SelectedImage.PreviewGlyph, TargetNullValue=&#xE91B;}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="52" Foreground="{StaticResource SubtleTextBrush}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding SelectedImage.FileName, TargetNullValue=Drop images to begin}" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,12,0,0" />
+                                    <TextBlock Text="{Binding SelectedImage.Resolution, TargetNullValue=Select an image to preview}" Style="{StaticResource MutedTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <ScrollViewer x:Name="MipChainScrollViewer" Visibility="{Binding HasMipChain, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto"
+                                          CanContentScroll="False"
+                                          PanningMode="Both"
+                                          Padding="18,14">
+                                <ItemsControl ItemsSource="{Binding PreviewMipmaps}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,22,0" VerticalAlignment="Top">
+                                                <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                                <TextBlock Text="{Binding Resolution}" Style="{StaticResource MutedTextBlockStyle}" FontSize="11" HorizontalAlignment="Center" Margin="0,2,0,8" />
+                                                <Button Command="{Binding DataContext.ShowMipPreviewCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" ToolTip="Open a larger inspection view.">
+                                                <Border Width="{Binding DisplayWidth}" Height="{Binding DisplayHeight}" Background="#0D2038" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="4">
+                                                    <Grid>
+                                                        <Image Source="{Binding Image}" Stretch="Fill" RenderOptions.BitmapScalingMode="{Binding ScalingMode}" Visibility="{Binding HasImage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                        <TextBlock Text="Loading…" Style="{StaticResource MutedTextBlockStyle}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding HasImage, Converter={StaticResource InverseBooleanToVisibilityConverter}}" />
+                                                    </Grid>
+                                                </Border>
+                                                </Button>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
                         </Grid>
                     </Border>
                     <Grid Grid.Row="2" Margin="0,14,0,0">
@@ -187,7 +230,7 @@
                             <TextBlock Grid.Column="3" Text="Height" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" /><TextBox Grid.Column="4" Text="{Binding ResizeHeight, UpdateSourceTrigger=PropertyChanged}" />
                             <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="0,8,0,0"><TextBlock Text="Mode" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" Margin="0,0,12,0" /><RadioButton Content="Stretch" GroupName="ResizeMode" IsChecked="{Binding SelectedResizeMode, Mode=TwoWay, Converter={StaticResource StringEqualsConverter}, ConverterParameter=Stretch}" Margin="0,0,18,0" /><RadioButton Content="Crop" GroupName="ResizeMode" IsChecked="{Binding SelectedResizeMode, Mode=TwoWay, Converter={StaticResource StringEqualsConverter}, ConverterParameter=Crop}" Margin="0" /></StackPanel>
                         </Grid>
-                        <Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,14,0,0" Visibility="{Binding IsPercentageResize, Converter={StaticResource BooleanToVisibilityConverter}}"><Grid.ColumnDefinitions><ColumnDefinition Width="132" /><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock Text="Percentage" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" /><ComboBox Grid.Column="1" ItemsSource="{Binding ResizePercentages}" SelectedItem="{Binding SelectedResizePercentage}" /></Grid>
+                        <Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,14,0,0" Visibility="{Binding IsPercentageResize, Converter={StaticResource BooleanToVisibilityConverter}}"><Grid.ColumnDefinitions><ColumnDefinition Width="132" /><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock Text="Percentage (%)" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" /><TextBox Grid.Column="1" Text="{Binding SelectedResizePercentage, UpdateSourceTrigger=PropertyChanged}" ToolTip="Enter a percentage, for example 50 or 125." /></Grid>
                         <TextBlock Grid.Row="2" Grid.ColumnSpan="3" Text="{Binding ResizeEstimateText}" Style="{StaticResource MutedTextBlockStyle}" Margin="0,12,0,0" />
                     </Grid>
                     <Button Grid.Row="2" Command="{Binding ResizeCommand}" Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Stretch"><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="&#xE8A3;" Style="{StaticResource IconTextBlockStyle}" FontSize="16" Margin="0,0,8,0" /><TextBlock Text="{Binding SelectedCount, StringFormat=Resize Selected ({0})}" FontWeight="SemiBold" /></StackPanel></Button>
