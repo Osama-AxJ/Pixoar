@@ -46,7 +46,7 @@ public sealed class PixoarSettings
     [
         new ConvertPreset { Name = "PNG", Format = "png" },
         new ConvertPreset { Name = "JPG", Format = "jpg" },
-        new ConvertPreset { Name = "WEBP", Format = "webp" },
+        new ConvertPreset { Name = "WEBP", Format = "webp", IsEnabled = false },
         new ConvertPreset { Name = "DDS", Format = "dds" }
     ];
 

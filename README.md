@@ -32,6 +32,7 @@
 - Convert between PNG, JPG, WEBP, BMP, TIFF, and DDS
 - Batch conversion and resizing
 - Percentage and dimension based resizing
+- Local AI image upscaling powered by Real-ESRGAN
 - DDS conversion with selectable compression
 - Windows Explorer context menu integration
 - Image information viewer
@@ -105,3 +106,4 @@ Available actions:
 - Convert
 - View image information
 - Open in Pixoar
+- Upscale 2x and Upscale 4x

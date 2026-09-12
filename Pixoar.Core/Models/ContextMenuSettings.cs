@@ -29,4 +29,32 @@ public sealed class ContextMenuSettings
     /// Gets or sets a value indicating whether the Open in Pixoar action should appear.
     /// </summary>
     public bool EnableOpenInPixoar { get; set; } = true;
+
+    /// <summary>Gets or sets whether the Upscale submenu appears in the context menu.</summary>
+    public bool EnableUpscale { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the DXT1 DDS compression shortcut appears in the context menu.
+    /// </summary>
+    public bool EnableDdsDxt1Shortcut { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the DXT3 DDS compression shortcut appears in the context menu.
+    /// </summary>
+    public bool EnableDdsDxt3Shortcut { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the DXT5 DDS compression shortcut appears in the context menu.
+    /// </summary>
+    public bool EnableDdsDxt5Shortcut { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the BC7 DDS compression shortcut appears in the context menu.
+    /// </summary>
+    public bool EnableDdsBc7Shortcut { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the uncompressed DDS shortcut appears in the context menu.
+    /// </summary>
+    public bool EnableDdsUncompressedShortcut { get; set; }
 }

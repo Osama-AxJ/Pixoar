@@ -15,6 +15,22 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="tools\realesrgan\**\*"
+             Link="tools\realesrgan\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="licenses\Real-ESRGAN-ncnn-vulkan-MIT.txt"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="licenses\NCNN-BSD-3-Clause.txt"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="licenses\Real-ESRGAN-model-BSD-3-Clause.txt"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup Condition="Exists('$(PkgMagick_NET-Q8-AnyCPU)\Notice.txt')">
     <Content Include="$(PkgMagick_NET-Q8-AnyCPU)\Notice.txt"
              Link="licenses\Magick.NET-Notice.txt"

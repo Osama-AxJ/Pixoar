@@ -13,6 +13,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pixoar.ColorRegression", "tests\Pixoar.ColorRegression\Pixoar.ColorRegression.csproj", "{780D34E2-895B-4525-959E-DEC8F8B391F4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pixoar.UpscaleSmoke", "tests\Pixoar.UpscaleSmoke\Pixoar.UpscaleSmoke.csproj", "{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,11 +73,24 @@ Global
 		{780D34E2-895B-4525-959E-DEC8F8B391F4}.Release|x64.Build.0 = Release|Any CPU
 		{780D34E2-895B-4525-959E-DEC8F8B391F4}.Release|x86.ActiveCfg = Release|Any CPU
 		{780D34E2-895B-4525-959E-DEC8F8B391F4}.Release|x86.Build.0 = Release|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Debug|x64.Build.0 = Debug|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Debug|x86.Build.0 = Debug|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Release|x64.ActiveCfg = Release|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Release|x64.Build.0 = Release|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Release|x86.ActiveCfg = Release|Any CPU
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{780D34E2-895B-4525-959E-DEC8F8B391F4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{F746A05B-ABBB-40EA-9B0C-7D630F8A13C3} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

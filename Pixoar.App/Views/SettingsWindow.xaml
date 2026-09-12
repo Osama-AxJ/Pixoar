@@ -169,6 +169,12 @@
                                           IsChecked="{Binding SaveConvertedFilesInConvertedFolder}" />
                                 <CheckBox Content="Save resized files in a &quot;Resize&quot; folder"
                                           IsChecked="{Binding SaveResizedFilesInResizeFolder}" />
+                                <CheckBox Content="Save upscaled images in an &quot;Upscale&quot; folder"
+                                          IsChecked="{Binding SaveUpscaledFilesInUpscaleFolder}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <TextBlock Text="Default Upscale Scale" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                    <ComboBox ItemsSource="{Binding UpscaleScaleOptions}" SelectedItem="{Binding DefaultUpscaleScale}" Width="100" />
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -312,7 +318,35 @@
                             <CheckBox Content="Open in Pixoar"
                                       IsChecked="{Binding EnableOpenInPixoar}"
                                       Margin="0,0,16,8" />
+                            <CheckBox Content="Upscale (2x and 4x)"
+                                      IsChecked="{Binding EnableUpscale}"
+                                      Margin="0,0,16,8" />
                         </WrapPanel>
+                        <TextBlock Text="{Binding MainContextMenuBudgetText}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource MutedTextBlockStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMainContextMenuWithinBudget}" Value="False">
+                                            <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding MainContextMenuBudgetWarningText}"
+                                   Foreground="{StaticResource DangerBrush}"
+                                   Margin="0,3,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource MutedTextBlockStyle}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMainContextMenuWithinBudget}" Value="False">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
 
                     <Grid Grid.Row="1">
@@ -367,34 +401,61 @@
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Text="Convert Formats"
+                                <TextBlock Text="Convert &amp; DDS Shortcuts"
                                            Style="{StaticResource SectionTitleTextBlockStyle}" />
-                                <TextBlock Grid.Row="1"
-                                           Text="Select the formats to show under Convert in Explorer."
-                                           Style="{StaticResource MutedTextBlockStyle}"
-                                           Margin="0,5,0,8" />
-                                <ScrollViewer Grid.Row="2"
+                                <ScrollViewer Grid.Row="1"
                                               VerticalScrollBarVisibility="Auto"
-                                              HorizontalScrollBarVisibility="Disabled">
-                                    <ItemsControl ItemsSource="{Binding ConvertPresets}"
-                                                  VerticalAlignment="Top">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <UniformGrid Columns="2" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <CheckBox Content="{Binding Name}"
-                                                          IsChecked="{Binding IsEnabled}"
-                                                          Margin="0,5,12,5" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Margin="0,5,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Select the formats to show under Convert in Explorer."
+                                                   Style="{StaticResource MutedTextBlockStyle}"
+                                                   Margin="0,0,0,8" />
+                                        <ItemsControl ItemsSource="{Binding ConvertPresets}"
+                                                      VerticalAlignment="Top">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Columns="2" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Content="{Binding Name}"
+                                                              IsChecked="{Binding IsEnabled}"
+                                                              Margin="0,5,12,5" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Separator Margin="0,14,0,12" />
+                                        <TextBlock Text="DDS Compression Shortcuts"
+                                                   Style="{StaticResource SectionTitleTextBlockStyle}" />
+                                        <WrapPanel Margin="0,5,0,0">
+                                            <CheckBox Content="DXT1"
+                                                      IsChecked="{Binding EnableDdsDxt1Shortcut}"
+                                                      IsEnabled="{Binding CanEnableDdsDxt1Shortcut}"
+                                                      Margin="0,0,16,8" />
+                                            <CheckBox Content="DXT3"
+                                                      IsChecked="{Binding EnableDdsDxt3Shortcut}"
+                                                      IsEnabled="{Binding CanEnableDdsDxt3Shortcut}"
+                                                      Margin="0,0,16,8" />
+                                            <CheckBox Content="DXT5"
+                                                      IsChecked="{Binding EnableDdsDxt5Shortcut}"
+                                                      IsEnabled="{Binding CanEnableDdsDxt5Shortcut}"
+                                                      Margin="0,0,16,8" />
+                                            <CheckBox Content="BC7"
+                                                      IsChecked="{Binding EnableDdsBc7Shortcut}"
+                                                      IsEnabled="{Binding CanEnableDdsBc7Shortcut}"
+                                                      Margin="0,0,16,8" />
+                                            <CheckBox Content="Uncompressed"
+                                                      IsChecked="{Binding EnableDdsUncompressedShortcut}"
+                                                      IsEnabled="{Binding CanEnableDdsUncompressedShortcut}"
+                                                      Margin="0,0,16,8" />
+                                        </WrapPanel>
+                                    </StackPanel>
                                 </ScrollViewer>
                             </Grid>
                         </Border>

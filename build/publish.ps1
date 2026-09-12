@@ -57,11 +57,18 @@ $requiredFiles = @(
     "Pixoar.exe",
     "Pixoar.Cli.exe",
     "texconv.exe",
+    "tools\realesrgan\realesrgan-ncnn-vulkan.exe",
+    "tools\realesrgan\vcomp140.dll",
+    "tools\realesrgan\models\realesrgan-x4plus.param",
+    "tools\realesrgan\models\realesrgan-x4plus.bin",
     "LICENSE",
     "licenses\DirectXTex-LICENSE.txt",
     "licenses\Magick.NET-Notice.txt",
     "licenses\Microsoft.Extensions-LICENSE.txt",
     "licenses\Microsoft.Extensions-THIRD-PARTY-NOTICES.txt",
+    "licenses\Real-ESRGAN-ncnn-vulkan-MIT.txt",
+    "licenses\NCNN-BSD-3-Clause.txt",
+    "licenses\Real-ESRGAN-model-BSD-3-Clause.txt",
     "Resources\Assets\Branding\pixoar.ico"
 )
 

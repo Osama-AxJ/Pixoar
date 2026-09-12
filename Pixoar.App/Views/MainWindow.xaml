@@ -52,6 +52,11 @@
                 <Button Command="{Binding ExportCommand}" Style="{StaticResource ToolbarButtonStyle}" MinHeight="40">
                     <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE74E;" Style="{StaticResource IconTextBlockStyle}" Foreground="{StaticResource CyanBrush}" Margin="0,0,8,0" /><TextBlock Text="Export" /></StackPanel>
                 </Button>
+                <TextBlock Text="Upscale" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" Margin="12,0,6,0" />
+                <ComboBox ItemsSource="{Binding UpscaleScales}" SelectedItem="{Binding SelectedUpscaleScale}" Width="72" MinHeight="40" Margin="0,0,8,0" />
+                <Button Command="{Binding UpscaleCommand}" Style="{StaticResource ToolbarButtonStyle}" MinHeight="40" ToolTip="Upscale selected images locally with Real-ESRGAN.">
+                    <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8A3;" Style="{StaticResource IconTextBlockStyle}" Foreground="{StaticResource CyanBrush}" Margin="0,0,8,0" /><TextBlock Text="{Binding SelectedCount, StringFormat=Upscale Selected ({0})}" /></StackPanel>
+                </Button>
                 <Button Command="{Binding AddFolderCommand}" Style="{StaticResource ToolbarButtonStyle}">
                     <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8B7;" Style="{StaticResource IconTextBlockStyle}" Foreground="#FFB36D" Margin="0,0,8,0" /><TextBlock Text="Add Folder" /></StackPanel>
                 </Button>

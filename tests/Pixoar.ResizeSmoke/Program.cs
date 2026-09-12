@@ -1097,6 +1097,17 @@ internal static class Program
                     new[] { "png", "jpg", "webp", "dds" },
                     StringComparer.Ordinal),
                 "A legacy settings file with no convertPresets property lost the default presets.");
+            Assert(
+                !settings.ConvertPresets.Single(preset => preset.Format == "webp").IsEnabled &&
+                settings.ConvertPresets.Single(preset => preset.Format == "dds").IsEnabled,
+                "The default Convert menu did not use DDS instead of WEBP.");
+            Assert(
+                settings.ContextMenu.EnableDdsDxt1Shortcut &&
+                !settings.ContextMenu.EnableDdsDxt3Shortcut &&
+                settings.ContextMenu.EnableDdsDxt5Shortcut &&
+                settings.ContextMenu.EnableDdsBc7Shortcut &&
+                !settings.ContextMenu.EnableDdsUncompressedShortcut,
+                "A legacy settings file did not receive the default DDS quick-action shortcuts.");
         }
 
         var ddsFilterSettings = new[]
@@ -1161,6 +1172,11 @@ internal static class Program
                     new ConvertPreset { Name = "WEBP", Format = "webp", IsEnabled = false },
                     new ConvertPreset { Name = "PNG", Format = "png" }
                 ];
+                settings.ContextMenu.EnableDdsDxt1Shortcut = false;
+                settings.ContextMenu.EnableDdsDxt3Shortcut = true;
+                settings.ContextMenu.EnableDdsDxt5Shortcut = false;
+                settings.ContextMenu.EnableDdsBc7Shortcut = true;
+                settings.ContextMenu.EnableDdsUncompressedShortcut = true;
             });
         }
 
@@ -1183,6 +1199,13 @@ internal static class Program
             Assert(
                 !settings.ConvertPresets[0].IsEnabled,
                 "Convert preset enabled state did not persist.");
+            Assert(
+                !settings.ContextMenu.EnableDdsDxt1Shortcut &&
+                settings.ContextMenu.EnableDdsDxt3Shortcut &&
+                !settings.ContextMenu.EnableDdsDxt5Shortcut &&
+                settings.ContextMenu.EnableDdsBc7Shortcut &&
+                settings.ContextMenu.EnableDdsUncompressedShortcut,
+                "DDS quick-action shortcut settings did not persist.");
 
             await service.UpdateAsync(current =>
             {

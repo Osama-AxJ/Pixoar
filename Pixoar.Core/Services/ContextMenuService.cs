@@ -13,6 +13,10 @@ internal sealed class ContextMenuService(
     IApplicationPathProvider pathProvider) : IContextMenuService
 {
     private const string MenuKeyName = "Pixoar";
+    private const string InfoMenuKeyName = "PixoarInfo";
+    private const string InfoMenuDisplayName = "Pixoar Info";
+    private const string LegacyDdsMenuKeyName = "PixoarDds";
+    private const int StaticCascadeEntryLimit = 16;
     private const string SystemFileAssociationsPath = @"Software\Classes\SystemFileAssociations";
     private const string ImageFileAssociation = "image";
     private const string AppExecutableName = "Pixoar.exe";
@@ -29,6 +33,13 @@ internal sealed class ContextMenuService(
         ".tif",
         ".tiff",
         ".dds"
+    ];
+
+    private static readonly string[] MenuKeyNames =
+    [
+        MenuKeyName,
+        InfoMenuKeyName,
+        LegacyDdsMenuKeyName
     ];
 
     private static readonly (string DisplayName, string FormatArgument)[] DdsCompressionCommands =
@@ -86,28 +97,30 @@ internal sealed class ContextMenuService(
             await logger.LogInformationAsync($"Context menu resolved icon path: {executablePaths.ContextMenuIconPath}", cancellationToken).ConfigureAwait(false);
             await logger.LogInformationAsync($"Context menu resolved texconv path: {texconvPath ?? "<not found>"}", cancellationToken).ConfigureAwait(false);
 
-            if (RemoveForImageFiles())
+            foreach (var removedMenuPath in RemoveForImageFiles())
             {
                 await logger.LogInformationAsync(
-                    $@"Registry key removed: HKEY_CURRENT_USER\{GetMenuKeyPath(ImageFileAssociation)}",
+                    $@"Registry key removed: HKEY_CURRENT_USER\{removedMenuPath}",
                     cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var extension in SupportedExtensions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (RemoveForExtension(extension))
+                foreach (var removedMenuPath in RemoveForExtension(extension))
                 {
                     await logger.LogInformationAsync(
-                        $@"Registry key removed: HKEY_CURRENT_USER\{GetMenuKeyPath(extension)}",
+                        $@"Registry key removed: HKEY_CURRENT_USER\{removedMenuPath}",
                         cancellationToken).ConfigureAwait(false);
                 }
 
-                var expectedMenuKey = CreateExpectedMenuKey(settings, executablePaths, extension);
-                writtenCommands.AddRange(InstallForExtension(extension, expectedMenuKey));
-                await logger.LogInformationAsync(
-                    $@"Registry key created: HKEY_CURRENT_USER\{GetMenuKeyPath(extension)}",
-                    cancellationToken).ConfigureAwait(false);
+                foreach (var registration in CreateExpectedMenuKeys(settings, executablePaths, extension))
+                {
+                    writtenCommands.AddRange(InstallForExtension(extension, registration));
+                    await logger.LogInformationAsync(
+                        $@"Registry key created: HKEY_CURRENT_USER\{GetMenuKeyPath(extension, registration.MenuKeyName)}",
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
 
             NotifyShellAssociationChanged();
@@ -136,18 +149,12 @@ internal sealed class ContextMenuService(
         try
         {
             var removedKeys = new List<string>();
-            if (RemoveForImageFiles())
-            {
-                removedKeys.Add($@"HKEY_CURRENT_USER\{GetMenuKeyPath(ImageFileAssociation)}");
-            }
+            removedKeys.AddRange(RemoveForImageFiles().Select(path => $@"HKEY_CURRENT_USER\{path}"));
 
             foreach (var extension in SupportedExtensions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (RemoveForExtension(extension))
-                {
-                    removedKeys.Add($@"HKEY_CURRENT_USER\{GetMenuKeyPath(extension)}");
-                }
+                removedKeys.AddRange(RemoveForExtension(extension).Select(path => $@"HKEY_CURRENT_USER\{path}"));
             }
 
             foreach (var registryKey in removedKeys)
@@ -212,13 +219,32 @@ internal sealed class ContextMenuService(
                 $"The context menu installation status is {installationStatus}; the complete registry tree is not valid.");
         }
 
+        var settings = settingsService.Current;
+        var executablePaths = CreateInstalledExecutablePaths();
+        if (settings.ContextMenu.EnableContextMenu)
+        {
+            report.Issues.AddRange(GetStaticMenuBudgetIssues(settings, executablePaths));
+        }
+
         foreach (var extension in SupportedExtensions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            report.Commands.AddRange(ReadCommandDiagnostics(
-                extension,
-                report.AppExecutablePath,
-                report.ContextMenuIconPath));
+            foreach (var registration in CreateExpectedMenuKeys(settings, executablePaths, extension))
+            {
+                var entryCount = CountStaticCascadeEntries(registration.ExpectedKey);
+                if (entryCount > StaticCascadeEntryLimit)
+                {
+                    report.Issues.Add(
+                        $"{registration.DisplayName} for {extension} has {entryCount} static menu entries; Windows Explorer displays at most {StaticCascadeEntryLimit}.");
+                }
+
+                report.Commands.AddRange(ReadCommandDiagnostics(
+                    extension,
+                    registration.MenuKeyName,
+                    registration.DiagnosticActionPath,
+                    report.AppExecutablePath,
+                    report.ContextMenuIconPath));
+            }
         }
 
         if (report.Commands.Count == 0)
@@ -244,33 +270,67 @@ internal sealed class ContextMenuService(
             var executablePaths = CreateInstalledExecutablePaths();
             var installedExtensions = new List<string>();
             var issues = new List<string>();
-            using var sharedMenuKey = Registry.CurrentUser.OpenSubKey(
-                GetMenuKeyPath(ImageFileAssociation),
-                writable: false);
+            var hasSharedMenuRegistration = HasMenuRegistration(ImageFileAssociation);
+            var hasAnyMenuRegistration = hasSharedMenuRegistration;
 
             foreach (var extension in SupportedExtensions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var menuKeyPath = GetMenuKeyPath(extension);
-                using var menuKey = Registry.CurrentUser.OpenSubKey(menuKeyPath, writable: false);
-                if (menuKey is null)
-                {
-                    continue;
-                }
+                var expectedRegistrations = settings.ContextMenu.EnableContextMenu
+                    ? CreateExpectedMenuKeys(settings, executablePaths, extension)
+                    : [];
+                var expectedByMenuKeyName = expectedRegistrations.ToDictionary(
+                    registration => registration.MenuKeyName,
+                    StringComparer.OrdinalIgnoreCase);
+                var presentMenuKeyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                installedExtensions.Add(extension);
-                if (settings.ContextMenu.EnableContextMenu)
+                foreach (var menuKeyName in MenuKeyNames)
                 {
+                    var menuKeyPath = GetMenuKeyPath(extension, menuKeyName);
+                    using var menuKey = Registry.CurrentUser.OpenSubKey(menuKeyPath, writable: false);
+                    if (menuKey is null)
+                    {
+                        continue;
+                    }
+
+                    hasAnyMenuRegistration = true;
+                    presentMenuKeyNames.Add(menuKeyName);
+                    if (menuKeyName.Equals(MenuKeyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        installedExtensions.Add(extension);
+                    }
+
+                    if (!settings.ContextMenu.EnableContextMenu)
+                    {
+                        continue;
+                    }
+
+                    if (!expectedByMenuKeyName.TryGetValue(menuKeyName, out var registration))
+                    {
+                        issues.Add($@"HKEY_CURRENT_USER\{menuKeyPath} is not expected for the current Quick Actions settings.");
+                        continue;
+                    }
+
                     ValidateRegistryKey(
                         menuKey,
-                        CreateExpectedMenuKey(settings, executablePaths, extension),
+                        registration.ExpectedKey,
                         $@"HKEY_CURRENT_USER\{menuKeyPath}",
                         issues);
+                }
+
+                if (settings.ContextMenu.EnableContextMenu)
+                {
+                    foreach (var registration in expectedRegistrations.Where(registration =>
+                                 !presentMenuKeyNames.Contains(registration.MenuKeyName)))
+                    {
+                        issues.Add(
+                            $"The context menu registry tree is missing for {extension}: {registration.MenuKeyName}.");
+                    }
                 }
             }
 
             ContextMenuInstallationStatus status;
-            if (sharedMenuKey is null && installedExtensions.Count == 0)
+            if (!hasAnyMenuRegistration)
             {
                 status = ContextMenuInstallationStatus.NotInstalled;
             }
@@ -283,8 +343,9 @@ internal sealed class ContextMenuService(
             else
             {
                 issues.AddRange(GetExecutablePathIssues(executablePaths));
+                issues.AddRange(GetStaticMenuBudgetIssues(settings, executablePaths));
 
-                if (sharedMenuKey is not null)
+                if (hasSharedMenuRegistration)
                 {
                     issues.Add("The legacy shared image context menu registry tree remains.");
                 }
@@ -387,25 +448,53 @@ internal sealed class ContextMenuService(
         }
     }
 
-    private static ExpectedRegistryKey CreateExpectedMenuKey(
+    private static IReadOnlyList<ContextMenuRegistration> CreateExpectedMenuKeys(
         PixoarSettings settings,
         ContextMenuExecutablePaths executablePaths,
         string extension)
     {
+        var enabledDdsCommands = GetEnabledDdsCompressionCommands(settings);
+        var ddsCapacity = GetDdsCompressionShortcutCapacity(settings, executablePaths);
+        var visibleDdsCommands = enabledDdsCommands.Take(ddsCapacity).ToArray();
+        var registrations = new List<ContextMenuRegistration>
+        {
+            new(MenuKeyName, "Pixoar", [], CreateExpectedMenuKey(settings, executablePaths, extension, visibleDdsCommands))
+        };
+
+        var infoMenuKey = CreateExpectedInfoMenuKey(settings, executablePaths);
+        if (infoMenuKey is not null)
+        {
+            registrations.Add(new(InfoMenuKeyName, InfoMenuDisplayName, ["Info"], infoMenuKey));
+        }
+
+        return registrations;
+    }
+
+    private static ExpectedRegistryKey CreateExpectedMenuKey(
+        PixoarSettings settings,
+        ContextMenuExecutablePaths executablePaths,
+        string extension,
+        IReadOnlyList<(string DisplayName, string FormatArgument)> ddsCompressionCommands)
+    {
+        // Windows Explorer renders at most 16 descendants in a registry-backed
+        // static cascade. Keep this menu below that limit so every normal image
+        // action, including Upscale, remains reachable.
         var menuKey = CreateExpectedSubmenu("Pixoar", executablePaths.ContextMenuIconPath);
         var menuShellKey = menuKey.AddSubKey("shell");
 
-        if (settings.ContextMenu.EnableResizePresets)
-        {
-            var resizeKey = CreateExpectedSubmenu("Resize", executablePaths.ContextMenuIconPath);
-            menuShellKey.SubKeys.Add("10_Resize", resizeKey);
-            var resizeShellKey = resizeKey.AddSubKey("shell");
-            var enabledPercentages = settings.ResizePresets
+        var enabledPercentages = settings.ContextMenu.EnableResizePresets
+            ? settings.ResizePresets
                 .Where(preset => preset.IsEnabled)
                 .Select(GetResizePresetPercentage)
                 .Where(percentage => percentage is > 0)
                 .Select(percentage => percentage.GetValueOrDefault())
-                .ToArray();
+                .ToArray()
+            : [];
+        if (enabledPercentages.Length > 0)
+        {
+            var resizeKey = CreateExpectedSubmenu("Resize", executablePaths.ContextMenuIconPath);
+            menuShellKey.SubKeys.Add("10_Resize", resizeKey);
+            var resizeShellKey = resizeKey.AddSubKey("shell");
 
             for (var index = 0; index < enabledPercentages.Length; index++)
             {
@@ -422,45 +511,25 @@ internal sealed class ContextMenuService(
             }
         }
 
-        if (settings.ContextMenu.EnableConvertPresets)
+        var enabledConvertPresets = settings.ContextMenu.EnableConvertPresets
+            ? GetEnabledConvertPresets(settings)
+                .Where(preset => !GetConvertPresetArgument(preset).Equals("dds", StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+            : [];
+        if (enabledConvertPresets.Length > 0 || ddsCompressionCommands.Count > 0)
         {
             var convertKey = CreateExpectedSubmenu("Convert", executablePaths.ContextMenuIconPath);
             menuShellKey.SubKeys.Add("20_Convert", convertKey);
             var convertShellKey = convertKey.AddSubKey("shell");
-            var enabledPresets = settings.ConvertPresets
-                .Where(preset => preset.IsEnabled)
-                .Where(preset => !string.IsNullOrWhiteSpace(GetConvertPresetArgument(preset)))
-                .ToArray();
 
-            for (var index = 0; index < enabledPresets.Length; index++)
+            for (var index = 0; index < enabledConvertPresets.Length; index++)
             {
-                var preset = enabledPresets[index];
+                var preset = enabledConvertPresets[index];
                 var formatArgument = GetConvertPresetArgument(preset);
                 var displayName = string.IsNullOrWhiteSpace(preset.Name)
                     ? formatArgument.ToUpperInvariant()
                     : preset.Name;
                 var keyName = $"{index + 1:00}_{CreateRegistryKeyName(displayName)}";
-
-                if (formatArgument.Equals("dds", StringComparison.OrdinalIgnoreCase))
-                {
-                    var ddsKey = CreateExpectedSubmenu("DDS", executablePaths.ContextMenuIconPath);
-                    convertShellKey.SubKeys.Add(keyName, ddsKey);
-                    var ddsShellKey = ddsKey.AddSubKey("shell");
-                    for (var compressionIndex = 0; compressionIndex < DdsCompressionCommands.Length; compressionIndex++)
-                    {
-                        var command = DdsCompressionCommands[compressionIndex];
-                        AddExpectedCommand(
-                            ddsShellKey,
-                            $"{compressionIndex + 1:00}_{CreateRegistryKeyName(command.DisplayName)}",
-                            command.DisplayName,
-                            executablePaths.AppPath,
-                            $"--explorer-batch convert --format {command.FormatArgument}",
-                            executablePaths.ContextMenuIconPath);
-                    }
-
-                    continue;
-                }
-
                 AddExpectedCommand(
                     convertShellKey,
                     keyName,
@@ -469,13 +538,55 @@ internal sealed class ContextMenuService(
                     $"--explorer-batch convert --format {formatArgument}",
                     executablePaths.ContextMenuIconPath);
             }
+
+            if (ddsCompressionCommands.Count > 0)
+            {
+                var ddsKey = CreateExpectedSubmenu("DDS", executablePaths.ContextMenuIconPath);
+                convertShellKey.SubKeys.Add("10_DDS", ddsKey);
+                var ddsShellKey = ddsKey.AddSubKey("shell");
+
+                for (var compressionIndex = 0; compressionIndex < ddsCompressionCommands.Count; compressionIndex++)
+                {
+                    var command = ddsCompressionCommands[compressionIndex];
+                    AddExpectedCommand(
+                        ddsShellKey,
+                        $"{compressionIndex + 1:00}_{CreateRegistryKeyName(command.DisplayName)}",
+                        command.DisplayName,
+                        executablePaths.AppPath,
+                        $"--explorer-batch convert --format {command.FormatArgument}",
+                        executablePaths.ContextMenuIconPath);
+                }
+            }
         }
 
+        if (settings.ContextMenu.EnableUpscale && !extension.Equals(".dds", StringComparison.OrdinalIgnoreCase))
+        {
+            var upscaleKey = CreateExpectedSubmenu("Upscale", executablePaths.ContextMenuIconPath);
+            menuShellKey.SubKeys.Add("50_Upscale", upscaleKey);
+            var upscaleShellKey = upscaleKey.AddSubKey("shell");
+            AddExpectedCommand(upscaleShellKey, "01_2x", "2x", executablePaths.AppPath, "--explorer-batch upscale --scale 2", executablePaths.ContextMenuIconPath);
+            AddExpectedCommand(upscaleShellKey, "02_4x", "4x", executablePaths.AppPath, "--explorer-batch upscale --scale 4", executablePaths.ContextMenuIconPath);
+        }
+
+        return menuKey;
+    }
+
+    private static ExpectedRegistryKey? CreateExpectedInfoMenuKey(
+        PixoarSettings settings,
+        ContextMenuExecutablePaths executablePaths)
+    {
+        if (!settings.ContextMenu.EnableImageInformation && !settings.ContextMenu.EnableOpenInPixoar)
+        {
+            return null;
+        }
+
+        var infoMenuKey = CreateExpectedSubmenu(InfoMenuDisplayName, executablePaths.ContextMenuIconPath);
+        var infoShellKey = infoMenuKey.AddSubKey("shell");
         if (settings.ContextMenu.EnableImageInformation)
         {
             AddExpectedCommand(
-                menuShellKey,
-                "30_ImageInformation",
+                infoShellKey,
+                "01_ImageInformation",
                 "Image Information",
                 executablePaths.AppPath,
                 "--info",
@@ -485,15 +596,15 @@ internal sealed class ContextMenuService(
         if (settings.ContextMenu.EnableOpenInPixoar)
         {
             AddExpectedCommand(
-                menuShellKey,
-                "40_OpenInPixoar",
+                infoShellKey,
+                "02_OpenInPixoar",
                 "Open in Pixoar",
                 executablePaths.AppPath,
                 "--open",
                 executablePaths.ContextMenuIconPath);
         }
 
-        return menuKey;
+        return infoMenuKey;
     }
 
     private static ExpectedRegistryKey CreateExpectedSubmenu(string displayName, string iconPath)
@@ -609,19 +720,19 @@ internal sealed class ContextMenuService(
     [SupportedOSPlatform("windows")]
     private static IReadOnlyList<string> InstallForExtension(
         string extension,
-        ExpectedRegistryKey expectedMenuKey)
+        ContextMenuRegistration registration)
     {
         var writtenCommands = new List<string>();
 
         using var shellKey = Registry.CurrentUser.CreateSubKey(GetShellKeyPath(extension), writable: true)
             ?? throw new InvalidOperationException($"Could not create Explorer shell key for {extension}.");
 
-        shellKey.DeleteSubKeyTree(MenuKeyName, throwOnMissingSubKey: false);
+        shellKey.DeleteSubKeyTree(registration.MenuKeyName, throwOnMissingSubKey: false);
 
-        using var menuKey = shellKey.CreateSubKey(MenuKeyName, writable: true)
+        using var menuKey = shellKey.CreateSubKey(registration.MenuKeyName, writable: true)
             ?? throw new InvalidOperationException($"Could not create Pixoar menu key for {extension}.");
 
-        WriteRegistryKey(menuKey, expectedMenuKey, writtenCommands);
+        WriteRegistryKey(menuKey, registration.ExpectedKey, writtenCommands);
 
         return writtenCommands;
     }
@@ -653,11 +764,13 @@ internal sealed class ContextMenuService(
     [SupportedOSPlatform("windows")]
     private static IReadOnlyList<ContextMenuCommandDiagnostic> ReadCommandDiagnostics(
         string extension,
+        string menuKeyName,
+        IReadOnlyList<string> diagnosticActionPath,
         string expectedAppPath,
         string expectedIconPath)
     {
         var diagnostics = new List<ContextMenuCommandDiagnostic>();
-        var menuShellPath = $@"{GetMenuKeyPath(extension)}\shell";
+        var menuShellPath = $@"{GetMenuKeyPath(extension, menuKeyName)}\shell";
 
         using var menuShellKey = Registry.CurrentUser.OpenSubKey(menuShellPath, writable: false);
         if (menuShellKey is null)
@@ -668,7 +781,7 @@ internal sealed class ContextMenuService(
         ReadCommandDiagnosticsRecursive(
             extension,
             menuShellPath,
-            [],
+            diagnosticActionPath,
             expectedAppPath,
             expectedIconPath,
             diagnostics);
@@ -744,6 +857,7 @@ internal sealed class ContextMenuService(
                 expectedAppPath,
                 expectedIconPath,
                 diagnostics);
+
         }
     }
 
@@ -807,7 +921,7 @@ internal sealed class ContextMenuService(
         string expectedIconPath)
     {
         var issues = new List<string>();
-        var actionText = string.Join(" > ", actionPath);
+        var actionName = actionPath.LastOrDefault() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(command))
         {
@@ -841,15 +955,21 @@ internal sealed class ContextMenuService(
             ValidateAppPath(parsedCommand, expectedAppPath, issues);
             ValidateConvertCommand(actionPath, parsedCommand, issues);
         }
-        else if (actionText.Equals("Image Information", StringComparison.OrdinalIgnoreCase))
+        else if (actionName.Equals("Image Information", StringComparison.OrdinalIgnoreCase))
         {
             ValidateAppPath(parsedCommand, expectedAppPath, issues);
             ValidateArguments(parsedCommand, "--info", issues);
         }
-        else if (actionText.Equals("Open in Pixoar", StringComparison.OrdinalIgnoreCase))
+        else if (actionName.Equals("Open in Pixoar", StringComparison.OrdinalIgnoreCase))
         {
             ValidateAppPath(parsedCommand, expectedAppPath, issues);
             ValidateArguments(parsedCommand, "--open", issues);
+        }
+        else if (IsUpscaleAction(actionPath))
+        {
+            ValidateAppPath(parsedCommand, expectedAppPath, issues);
+            var scale = actionPath.LastOrDefault()?.Contains('4') == true ? "4" : "2";
+            ValidateArguments(parsedCommand, $"--explorer-batch upscale --scale {scale}", issues);
         }
         else
         {
@@ -916,6 +1036,12 @@ internal sealed class ContextMenuService(
         ValidateArguments(parsedCommand, $"--explorer-batch resize --percentage {percentage}", issues);
     }
 
+    private static bool IsUpscaleAction(IReadOnlyList<string> actionPath) =>
+        actionPath.Count == 2 &&
+        actionPath[0].Equals("Upscale", StringComparison.OrdinalIgnoreCase) &&
+        (actionPath[1].Equals("2x", StringComparison.OrdinalIgnoreCase) ||
+         actionPath[1].Equals("4x", StringComparison.OrdinalIgnoreCase));
+
     private static void ValidateConvertCommand(
         IReadOnlyList<string> actionPath,
         ParsedRegistryCommand parsedCommand,
@@ -935,18 +1061,11 @@ internal sealed class ContextMenuService(
         }
 
         var format = arguments[3];
-        if (actionPath.Count == 3 &&
-            actionPath[1].Equals("DDS", StringComparison.OrdinalIgnoreCase))
+        if (TryGetDdsCompressionCommand(actionPath, out var ddsCommand))
         {
-            var command = DdsCompressionCommands.FirstOrDefault(option =>
-                option.DisplayName.Equals(actionPath[2], StringComparison.OrdinalIgnoreCase));
-            if (string.IsNullOrWhiteSpace(command.FormatArgument))
+            if (!format.Equals(ddsCommand.FormatArgument, StringComparison.OrdinalIgnoreCase))
             {
-                issues.Add($"The DDS compression menu entry is not recognized: {actionPath[2]}.");
-            }
-            else if (!format.Equals(command.FormatArgument, StringComparison.OrdinalIgnoreCase))
-            {
-                issues.Add($"Expected DDS compression format argument: {command.FormatArgument}.");
+                issues.Add($"Expected DDS compression format argument: {ddsCommand.FormatArgument}.");
             }
 
             return;
@@ -977,38 +1096,86 @@ internal sealed class ContextMenuService(
 
     private static bool IsConvertAction(IReadOnlyList<string> actionPath)
     {
-        return actionPath.Count >= 2 &&
-            actionPath[0].Equals("Convert", StringComparison.OrdinalIgnoreCase);
+        return (actionPath.Count >= 2 &&
+                (actionPath[0].Equals("Convert", StringComparison.OrdinalIgnoreCase) ||
+                 actionPath[0].Equals("DDS", StringComparison.OrdinalIgnoreCase))) ||
+            TryGetDdsCompressionCommand(actionPath, out _);
     }
 
-    [SupportedOSPlatform("windows")]
-    private static bool RemoveForExtension(string extension)
+    private static bool TryGetDdsCompressionCommand(
+        IReadOnlyList<string> actionPath,
+        out (string DisplayName, string FormatArgument) command)
     {
-        using var shellKey = Registry.CurrentUser.OpenSubKey(GetShellKeyPath(extension), writable: true);
-        if (shellKey is null ||
-            !shellKey.GetSubKeyNames().Contains(MenuKeyName, StringComparer.OrdinalIgnoreCase))
+        command = default;
+        var displayName = actionPath.LastOrDefault();
+        if (string.IsNullOrWhiteSpace(displayName))
         {
             return false;
         }
 
-        shellKey?.DeleteSubKeyTree(MenuKeyName, throwOnMissingSubKey: false);
-        return true;
+        foreach (var candidate in DdsCompressionCommands)
+        {
+            if (displayName.Equals(candidate.DisplayName, StringComparison.OrdinalIgnoreCase) ||
+                displayName.Equals($"DDS ({candidate.DisplayName})", StringComparison.OrdinalIgnoreCase))
+            {
+                command = candidate;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     [SupportedOSPlatform("windows")]
-    private static bool RemoveForImageFiles()
+    private static IReadOnlyList<string> RemoveForExtension(string extension) =>
+        RemoveForAssociation(extension);
+
+    [SupportedOSPlatform("windows")]
+    private static IReadOnlyList<string> RemoveForImageFiles() =>
+        RemoveForAssociation(ImageFileAssociation);
+
+    [SupportedOSPlatform("windows")]
+    private static IReadOnlyList<string> RemoveForAssociation(string association)
     {
-        using var shellKey = Registry.CurrentUser.OpenSubKey(
-            GetShellKeyPath(ImageFileAssociation),
-            writable: true);
-        if (shellKey is null ||
-            !shellKey.GetSubKeyNames().Contains(MenuKeyName, StringComparer.OrdinalIgnoreCase))
+        var removedMenuPaths = new List<string>();
+        using var shellKey = Registry.CurrentUser.OpenSubKey(GetShellKeyPath(association), writable: true);
+        if (shellKey is null)
         {
-            return false;
+            return removedMenuPaths;
         }
 
-        shellKey?.DeleteSubKeyTree(MenuKeyName, throwOnMissingSubKey: false);
-        return true;
+        var existingMenuKeyNames = shellKey
+            .GetSubKeyNames()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var menuKeyName in MenuKeyNames)
+        {
+            if (!existingMenuKeyNames.Contains(menuKeyName))
+            {
+                continue;
+            }
+
+            shellKey.DeleteSubKeyTree(menuKeyName, throwOnMissingSubKey: false);
+            removedMenuPaths.Add(GetMenuKeyPath(association, menuKeyName));
+        }
+
+        return removedMenuPaths;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static bool HasMenuRegistration(string association)
+    {
+        foreach (var menuKeyName in MenuKeyNames)
+        {
+            using var menuKey = Registry.CurrentUser.OpenSubKey(
+                GetMenuKeyPath(association, menuKeyName),
+                writable: false);
+            if (menuKey is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     [SupportedOSPlatform("windows")]
@@ -1128,6 +1295,84 @@ internal sealed class ContextMenuService(
             .ToLowerInvariant();
     }
 
+    private static ConvertPreset[] GetEnabledConvertPresets(PixoarSettings settings)
+    {
+        return settings.ConvertPresets
+            .Where(preset => preset.IsEnabled)
+            .Where(preset => !string.IsNullOrWhiteSpace(GetConvertPresetArgument(preset)))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<(string DisplayName, string FormatArgument)> GetEnabledDdsCompressionCommands(
+        PixoarSettings settings)
+    {
+        if (!settings.ContextMenu.EnableConvertPresets ||
+            !GetEnabledConvertPresets(settings).Any(preset =>
+                GetConvertPresetArgument(preset).Equals("dds", StringComparison.OrdinalIgnoreCase)))
+        {
+            return [];
+        }
+
+        return DdsCompressionCommands
+            .Where(command => IsDdsCompressionShortcutEnabled(settings.ContextMenu, command.FormatArgument))
+            .ToArray();
+    }
+
+    private static int GetDdsCompressionShortcutCapacity(
+        PixoarSettings settings,
+        ContextMenuExecutablePaths executablePaths)
+    {
+        for (var count = DdsCompressionCommands.Length; count >= 0; count--)
+        {
+            var candidateMenu = CreateExpectedMenuKey(
+                settings,
+                executablePaths,
+                ".png",
+                DdsCompressionCommands.Take(count).ToArray());
+            if (CountStaticCascadeEntries(candidateMenu) <= StaticCascadeEntryLimit)
+            {
+                return count;
+            }
+        }
+
+        return 0;
+    }
+
+    private static IReadOnlyList<string> GetStaticMenuBudgetIssues(
+        PixoarSettings settings,
+        ContextMenuExecutablePaths executablePaths)
+    {
+        var requestedMenu = CreateExpectedMenuKey(
+            settings,
+            executablePaths,
+            ".png",
+            GetEnabledDdsCompressionCommands(settings));
+        var totalEntryCount = CountStaticCascadeEntries(requestedMenu);
+
+        if (totalEntryCount <= StaticCascadeEntryLimit)
+        {
+            return [];
+        }
+
+        return
+        [
+            $"Pixoar is configured with {totalEntryCount} static menu entries for normal images, but Windows Explorer displays at most {StaticCascadeEntryLimit}. Disable a resize/convert preset or a DDS compression shortcut before applying changes."
+        ];
+    }
+
+    private static bool IsDdsCompressionShortcutEnabled(ContextMenuSettings settings, string formatArgument)
+    {
+        return formatArgument switch
+        {
+            "dds-dxt1" => settings.EnableDdsDxt1Shortcut,
+            "dds-dxt3" => settings.EnableDdsDxt3Shortcut,
+            "dds-dxt5" => settings.EnableDdsDxt5Shortcut,
+            "dds-bc7" => settings.EnableDdsBc7Shortcut,
+            "dds-uncompressed" => settings.EnableDdsUncompressedShortcut,
+            _ => false
+        };
+    }
+
     private static string CreateRegistryKeyName(string value)
     {
         var sanitized = new string(value
@@ -1145,14 +1390,36 @@ internal sealed class ContextMenuService(
             StringComparison.OrdinalIgnoreCase);
     }
 
+    private static int CountStaticCascadeEntries(ExpectedRegistryKey menuKey)
+    {
+        return menuKey.SubKeys.TryGetValue("shell", out var shellKey)
+            ? CountStaticCascadeEntriesInShell(shellKey)
+            : 0;
+    }
+
+    private static int CountStaticCascadeEntriesInShell(ExpectedRegistryKey shellKey)
+    {
+        var entryCount = 0;
+        foreach (var commandKey in shellKey.SubKeys.Values)
+        {
+            entryCount++;
+            if (commandKey.SubKeys.TryGetValue("shell", out var childShellKey))
+            {
+                entryCount += CountStaticCascadeEntriesInShell(childShellKey);
+            }
+        }
+
+        return entryCount;
+    }
+
     private static string GetShellKeyPath(string extension)
     {
         return $@"{SystemFileAssociationsPath}\{extension}\shell";
     }
 
-    private static string GetMenuKeyPath(string extension)
+    private static string GetMenuKeyPath(string extension, string menuKeyName = MenuKeyName)
     {
-        return $@"{GetShellKeyPath(extension)}\{MenuKeyName}";
+        return $@"{GetShellKeyPath(extension)}\{menuKeyName}";
     }
 
     private sealed class ExpectedRegistryKey
@@ -1170,6 +1437,12 @@ internal sealed class ContextMenuService(
             return subKey;
         }
     }
+
+    private sealed record ContextMenuRegistration(
+        string MenuKeyName,
+        string DisplayName,
+        IReadOnlyList<string> DiagnosticActionPath,
+        ExpectedRegistryKey ExpectedKey);
 
     private sealed record ContextMenuExecutablePaths(string CliPath, string AppPath, string ContextMenuIconPath);
 

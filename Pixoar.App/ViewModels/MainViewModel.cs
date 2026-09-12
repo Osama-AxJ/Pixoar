@@ -26,6 +26,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IDdsService _ddsService;
     private readonly IImageConversionService _imageConversionService;
     private readonly IImageResizeService _imageResizeService;
+    private readonly IImageUpscaleService _imageUpscaleService;
     private readonly ISettingsService _settingsService;
     private readonly string _pendingExportRoot = Path.Combine(
         Path.GetTempPath(),
@@ -45,6 +46,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _selectedResizeMethod = "By Dimensions";
     private string _selectedResizePercentage = "50";
     private string _selectedResizeMode = "Fit";
+    private string _selectedUpscaleScale = "2x";
     private double _progressPercent;
     private bool _isBusy;
     private bool _isUpdatingLinkedDimension;
@@ -68,6 +70,7 @@ public sealed class MainViewModel : ViewModelBase
         IDdsService ddsService,
         IImageConversionService imageConversionService,
         IImageResizeService imageResizeService,
+        IImageUpscaleService imageUpscaleService,
         ISettingsService settingsService)
     {
         _fileDialogService = fileDialogService;
@@ -78,6 +81,7 @@ public sealed class MainViewModel : ViewModelBase
         _ddsService = ddsService;
         _imageConversionService = imageConversionService;
         _imageResizeService = imageResizeService;
+        _imageUpscaleService = imageUpscaleService;
         _settingsService = settingsService;
 
         ApplicationTitle = "Pixoar";
@@ -87,6 +91,8 @@ public sealed class MainViewModel : ViewModelBase
         _selectedDdsCompression = FormatDdsCompression(settingsService.Current.Dds.Compression);
         ResizeMethods = ["By Dimensions", "By Percentage"];
         ResizeModes = ["Stretch", "Crop", "Fit"];
+        UpscaleScales = ["2x", "4x"];
+        _selectedUpscaleScale = settingsService.Current.General.DefaultUpscaleScale == 4 ? "4x" : "2x";
 
         AddImagesCommand = new AsyncRelayCommand(_ => AddImagesAsync(), _ => !IsBusy);
         AddFolderCommand = new AsyncRelayCommand(_ => AddFolderAsync(), _ => !IsBusy);
@@ -102,6 +108,7 @@ public sealed class MainViewModel : ViewModelBase
         DropFilesCommand = new AsyncRelayCommand(AddDroppedPathsAsync, _ => !IsBusy);
         ConvertCommand = new AsyncRelayCommand(_ => ConvertSelectedAsync(), _ => HasSelection && !IsBusy);
         ResizeCommand = new AsyncRelayCommand(_ => ResizeSelectedAsync(), _ => CanResize);
+        UpscaleCommand = new AsyncRelayCommand(_ => UpscaleSelectedAsync(), _ => CanUpscale);
         ExportCommand = new AsyncRelayCommand(_ => ExportPendingAsync(), _ => CanExport);
         ShowSourceImagesCommand = new RelayCommand(_ => ShowSourceImages(), _ => !IsBusy);
         ShowProcessedImagesCommand = new RelayCommand(_ => ShowProcessedImages(), _ => !IsBusy);
@@ -182,6 +189,9 @@ public sealed class MainViewModel : ViewModelBase
     /// </summary>
     public IReadOnlyList<string> ResizeModes { get; }
 
+    /// <summary>Gets the scale factors supported by the bundled general model.</summary>
+    public IReadOnlyList<string> UpscaleScales { get; }
+
     /// <summary>
     /// Gets the command that opens the add-images dialog.
     /// </summary>
@@ -226,6 +236,9 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets the resize command.
     /// </summary>
     public AsyncRelayCommand ResizeCommand { get; }
+
+    /// <summary>Gets the command that locally upscales selected images.</summary>
+    public AsyncRelayCommand UpscaleCommand { get; }
 
     /// <summary>
     /// Gets the command that exports completed desktop results to a selected folder.
@@ -347,6 +360,9 @@ public sealed class MainViewModel : ViewModelBase
     /// Gets a value indicating whether the current resize settings can be submitted.
     /// </summary>
     public bool CanResize => HasSelection && !IsBusy && HasValidResizeInput();
+
+    /// <summary>Gets whether local AI upscaling can run for the current selection.</summary>
+    public bool CanUpscale => HasSelection && !IsBusy;
 
     /// <summary>
     /// Gets a value indicating whether dimension-based resize is selected.
@@ -521,6 +537,13 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _selectedResizeMode;
         set => ApplyResizeMode(value);
+    }
+
+    /// <summary>Gets or sets the selected local AI upscale scale.</summary>
+    public string SelectedUpscaleScale
+    {
+        get => _selectedUpscaleScale;
+        set => SetProperty(ref _selectedUpscaleScale, value);
     }
 
     /// <summary>
@@ -840,6 +863,21 @@ public sealed class MainViewModel : ViewModelBase
             "Resize",
             progress => _imageResizeService.ResizeBatchAsync(requests, progress),
             "resize");
+        await MoveSuccessfulResultsToProcessedAsync(result, selectedImages);
+    }
+
+    private async Task UpscaleSelectedAsync()
+    {
+        var scale = string.Equals(SelectedUpscaleScale, "4x", StringComparison.OrdinalIgnoreCase) ? 4 : 2;
+        await _settingsService.UpdateAsync(settings => settings.General.DefaultUpscaleScale = scale);
+        var selectedImages = SelectedImages.ToArray();
+        var requests = selectedImages.Select(image => new UpscaleRequest
+        {
+            InputPath = image.FilePath,
+            Scale = scale,
+            OutputFolder = CreateBatchStagingDirectory()
+        }).ToArray();
+        var result = await RunBatchAsync("Upscale", progress => _imageUpscaleService.UpscaleBatchAsync(requests, progress), "upscale");
         await MoveSuccessfulResultsToProcessedAsync(result, selectedImages);
     }
 
@@ -1246,6 +1284,7 @@ public sealed class MainViewModel : ViewModelBase
         DropFilesCommand.NotifyCanExecuteChanged();
         ConvertCommand.NotifyCanExecuteChanged();
         ResizeCommand.NotifyCanExecuteChanged();
+        UpscaleCommand.NotifyCanExecuteChanged();
         ExportCommand.NotifyCanExecuteChanged();
         ShowSourceImagesCommand.NotifyCanExecuteChanged();
         ShowProcessedImagesCommand.NotifyCanExecuteChanged();
@@ -1256,6 +1295,7 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanResize));
         OnPropertyChanged(nameof(ResizeEstimateText));
         ResizeCommand.NotifyCanExecuteChanged();
+        UpscaleCommand.NotifyCanExecuteChanged();
     }
 
     private async Task LoadSelectedPreviewAsync(ImageFileItem? item, int version, CancellationToken cancellationToken)

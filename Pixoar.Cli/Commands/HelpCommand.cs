@@ -28,6 +28,7 @@ internal sealed class HelpCommand : ICommand
           Pixoar.Cli settings
           Pixoar.Cli convert --format <format> [--compression <mode>] [--output <folder>] [--recursive] <file|folder> [...]
           Pixoar.Cli resize (--preset <percent> | --percentage <number> | --width <px> [--height <px>] | --height <px>) [--mode fit|crop|stretch] [--output <folder>] [--recursive] <file|folder> [...]
+          Pixoar.Cli upscale --scale <2|4> [--output <folder>] [--recursive] <file|folder> [...]
           Pixoar.Cli info [--json] [--recursive] <file|folder> [...]
           Pixoar.Cli uninstall [--remove-user-data]
           Pixoar.Cli diagnose-context-menu
@@ -36,6 +37,7 @@ internal sealed class HelpCommand : ICommand
         Commands:
           convert   Convert one or more images to PNG, JPG, WEBP, BMP, TIFF, or DDS.
           resize    Resize one or more images by percentage preset or dimensions.
+          upscale   Upscale one or more images locally with Real-ESRGAN (Vulkan GPU required).
           info      Print image metadata in text or JSON.
           settings  Show shared settings and log locations.
           uninstall Remove Pixoar registry entries and optional user data.
@@ -54,6 +56,7 @@ internal sealed class HelpCommand : ICommand
           Pixoar.Cli resize --percentage 50 ".\Images\image.png"
           Pixoar.Cli resize --percentage 75 ".\Images\image.png"
           Pixoar.Cli resize --width 1024 --height 1024 --mode fit ".\Images\image.png"
+          Pixoar.Cli upscale --scale 2 ".\Images\image.png"
           Pixoar.Cli info ".\Images\image.dds"
           Pixoar.Cli info ".\Images\image.png" --json
           Pixoar.Cli uninstall

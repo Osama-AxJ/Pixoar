@@ -285,8 +285,12 @@ internal static class ExplorerBatchDispatcher
             actionArguments[1].Equals("--percentage", StringComparison.OrdinalIgnoreCase) &&
             int.TryParse(actionArguments[2], out var percentage) &&
             percentage > 0;
+        var isUpscale =
+            actionArguments[0].Equals("upscale", StringComparison.OrdinalIgnoreCase) &&
+            actionArguments[1].Equals("--scale", StringComparison.OrdinalIgnoreCase) &&
+            (actionArguments[2].Equals("2", StringComparison.OrdinalIgnoreCase) || actionArguments[2].Equals("4", StringComparison.OrdinalIgnoreCase));
 
-        if (!isConvert && !isResize)
+        if (!isConvert && !isResize && !isUpscale)
         {
             error = "The Explorer batch action was not recognized.";
             return false;

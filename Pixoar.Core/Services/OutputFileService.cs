@@ -97,6 +97,11 @@ internal sealed class OutputFileService(
             return Path.Combine(sourceDirectory, "Resize");
         }
 
+        if (request.OperationKind == OutputOperationKind.Upscale && settings.SaveUpscaledFilesInUpscaleFolder)
+        {
+            return Path.Combine(sourceDirectory, "Upscale");
+        }
+
         if (!settings.SaveBesideOriginal && !string.IsNullOrWhiteSpace(settings.CustomOutputFolder))
         {
             return settings.CustomOutputFolder;

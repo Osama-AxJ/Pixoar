@@ -11,6 +11,7 @@ internal static class CliServiceCollectionExtensions
         services.AddSingleton<ICommand, SettingsCommand>();
         services.AddSingleton<ICommand, ConvertCommand>();
         services.AddSingleton<ICommand, ResizeCommand>();
+        services.AddSingleton<ICommand, UpscaleCommand>();
         services.AddSingleton<ICommand, InfoCommand>();
         services.AddSingleton<ICommand, UninstallCommand>();
         services.AddSingleton<ICommand, DiagnoseContextMenuCommand>();

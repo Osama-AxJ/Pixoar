@@ -33,6 +33,9 @@ public sealed class OutputSettings
     /// </summary>
     public bool SaveResizedFilesInResizeFolder { get; set; }
 
+    /// <summary>Gets or sets a value indicating whether upscaled images use an Upscale folder.</summary>
+    public bool SaveUpscaledFilesInUpscaleFolder { get; set; }
+
     /// <summary>
     /// Gets or sets the legacy overwrite setting while older settings are migrated.
     /// </summary>

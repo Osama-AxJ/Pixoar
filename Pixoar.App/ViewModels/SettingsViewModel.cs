@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using Pixoar.App.Commands;
@@ -14,6 +16,8 @@ namespace Pixoar.App.ViewModels;
 /// </summary>
 public sealed class SettingsViewModel : ViewModelBase
 {
+    private const int ExplorerStaticMenuEntryLimit = 16;
+    private const int DdsCompressionShortcutOptionCount = 5;
     private const string WebsiteUrl = "https://oaj.sa";
     private const string GitHubUrl = "https://github.com/Osama-AxJ/Pixoar";
     private const string GitHubLicenseUrl = "https://github.com/Osama-AxJ/Pixoar/blob/main/LICENSE";
@@ -32,6 +36,8 @@ public sealed class SettingsViewModel : ViewModelBase
     private string _selectedOutputConflictBehavior = "Rename duplicates automatically";
     private bool _saveConvertedFilesInConvertedFolder;
     private bool _saveResizedFilesInResizeFolder;
+    private bool _saveUpscaledFilesInUpscaleFolder;
+    private string _defaultUpscaleScale = "2x";
     private string _selectedCompression = "DXT5";
     private bool _generateMipmaps = true;
     private string _selectedMipmapMode = "Full chain";
@@ -46,6 +52,12 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _enableConvertPresets = true;
     private bool _enableImageInformation = true;
     private bool _enableOpenInPixoar = true;
+    private bool _enableUpscale = true;
+    private bool _enableDdsDxt1Shortcut = true;
+    private bool _enableDdsDxt3Shortcut;
+    private bool _enableDdsDxt5Shortcut = true;
+    private bool _enableDdsBc7Shortcut = true;
+    private bool _enableDdsUncompressedShortcut;
     private string _statusText = "Settings ready.";
     private string _contextMenuInstallationStatusText = "Checking...";
 
@@ -81,6 +93,7 @@ public sealed class SettingsViewModel : ViewModelBase
         CompressionOptions = ["DXT1", "DXT3", "DXT5", "BC7", "Uncompressed"];
         MipmapModeOptions = ["Full chain", "Custom"];
         MipmapFilterOptions = ["Fant (Default)", "Linear", "Cubic", "Triangle"];
+        UpscaleScaleOptions = ["2x", "4x"];
 
         var settings = settingsService.Current;
         _checkForUpdates = settings.General.CheckForUpdates;
@@ -89,6 +102,8 @@ public sealed class SettingsViewModel : ViewModelBase
         _selectedOutputConflictBehavior = FormatOutputConflictBehavior(settings.Output.ConflictBehavior);
         _saveConvertedFilesInConvertedFolder = settings.Output.SaveConvertedFilesInConvertedFolder;
         _saveResizedFilesInResizeFolder = settings.Output.SaveResizedFilesInResizeFolder;
+        _saveUpscaledFilesInUpscaleFolder = settings.Output.SaveUpscaledFilesInUpscaleFolder;
+        _defaultUpscaleScale = settings.General.DefaultUpscaleScale == 4 ? "4x" : "2x";
         _selectedCompression = FormatCompression(settings.Dds.Compression.ToString());
         _generateMipmaps = settings.Dds.GenerateMipmaps;
         _selectedMipmapMode = FormatMipmapMode(settings.Dds.MipmapMode);
@@ -102,6 +117,12 @@ public sealed class SettingsViewModel : ViewModelBase
         _enableConvertPresets = settings.ContextMenu.EnableConvertPresets;
         _enableImageInformation = settings.ContextMenu.EnableImageInformation;
         _enableOpenInPixoar = settings.ContextMenu.EnableOpenInPixoar;
+        _enableUpscale = settings.ContextMenu.EnableUpscale;
+        _enableDdsDxt1Shortcut = settings.ContextMenu.EnableDdsDxt1Shortcut;
+        _enableDdsDxt3Shortcut = settings.ContextMenu.EnableDdsDxt3Shortcut;
+        _enableDdsDxt5Shortcut = settings.ContextMenu.EnableDdsDxt5Shortcut;
+        _enableDdsBc7Shortcut = settings.ContextMenu.EnableDdsBc7Shortcut;
+        _enableDdsUncompressedShortcut = settings.ContextMenu.EnableDdsUncompressedShortcut;
 
         foreach (var preset in settings.ResizePresets)
         {
@@ -112,6 +133,9 @@ public sealed class SettingsViewModel : ViewModelBase
         {
             ConvertPresets.Add(preset);
         }
+
+        WatchPresetCollection(ResizePresets);
+        WatchPresetCollection(ConvertPresets);
 
         AddResizePresetCommand = new RelayCommand(_ => AddResizePreset());
         RemoveResizePresetCommand = new RelayCommand(_ => RemoveResizePreset(), _ => SelectedResizePreset is not null);
@@ -152,6 +176,9 @@ public sealed class SettingsViewModel : ViewModelBase
     /// Gets the supported DDS mipmap filters.
     /// </summary>
     public IReadOnlyList<string> MipmapFilterOptions { get; }
+
+    /// <summary>Gets supported default local AI upscale scales.</summary>
+    public IReadOnlyList<string> UpscaleScaleOptions { get; }
 
     /// <summary>
     /// Gets editable resize presets.
@@ -332,6 +359,20 @@ public sealed class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _saveResizedFilesInResizeFolder, value);
     }
 
+    /// <summary>Gets or sets whether upscaled images use an Upscale folder.</summary>
+    public bool SaveUpscaledFilesInUpscaleFolder
+    {
+        get => _saveUpscaledFilesInUpscaleFolder;
+        set => SetProperty(ref _saveUpscaledFilesInUpscaleFolder, value);
+    }
+
+    /// <summary>Gets or sets the default local AI upscale scale.</summary>
+    public string DefaultUpscaleScale
+    {
+        get => _defaultUpscaleScale;
+        set => SetProperty(ref _defaultUpscaleScale, value);
+    }
+
     /// <summary>
     /// Gets or sets the selected DDS compression mode.
     /// </summary>
@@ -463,7 +504,13 @@ public sealed class SettingsViewModel : ViewModelBase
     public bool EnableResizePresets
     {
         get => _enableResizePresets;
-        set => SetProperty(ref _enableResizePresets, value);
+        set
+        {
+            if (SetProperty(ref _enableResizePresets, value))
+            {
+                NotifyMainContextMenuBudgetChanged();
+            }
+        }
     }
 
     /// <summary>
@@ -472,7 +519,13 @@ public sealed class SettingsViewModel : ViewModelBase
     public bool EnableConvertPresets
     {
         get => _enableConvertPresets;
-        set => SetProperty(ref _enableConvertPresets, value);
+        set
+        {
+            if (SetProperty(ref _enableConvertPresets, value))
+            {
+                NotifyMainContextMenuBudgetChanged();
+            }
+        }
     }
 
     /// <summary>
@@ -492,6 +545,139 @@ public sealed class SettingsViewModel : ViewModelBase
         get => _enableOpenInPixoar;
         set => SetProperty(ref _enableOpenInPixoar, value);
     }
+
+    /// <summary>Gets or sets whether Upscale appears in Explorer quick actions.</summary>
+    public bool EnableUpscale
+    {
+        get => _enableUpscale;
+        set
+        {
+            if (SetProperty(ref _enableUpscale, value))
+            {
+                NotifyMainContextMenuBudgetChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the DXT1 DDS shortcut appears in Explorer.
+    /// </summary>
+    public bool EnableDdsDxt1Shortcut
+    {
+        get => _enableDdsDxt1Shortcut;
+        set => SetDdsShortcutEnabled(ref _enableDdsDxt1Shortcut, value, nameof(EnableDdsDxt1Shortcut));
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the DXT3 DDS shortcut appears in Explorer.
+    /// </summary>
+    public bool EnableDdsDxt3Shortcut
+    {
+        get => _enableDdsDxt3Shortcut;
+        set => SetDdsShortcutEnabled(ref _enableDdsDxt3Shortcut, value, nameof(EnableDdsDxt3Shortcut));
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the DXT5 DDS shortcut appears in Explorer.
+    /// </summary>
+    public bool EnableDdsDxt5Shortcut
+    {
+        get => _enableDdsDxt5Shortcut;
+        set => SetDdsShortcutEnabled(ref _enableDdsDxt5Shortcut, value, nameof(EnableDdsDxt5Shortcut));
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the BC7 DDS shortcut appears in Explorer.
+    /// </summary>
+    public bool EnableDdsBc7Shortcut
+    {
+        get => _enableDdsBc7Shortcut;
+        set => SetDdsShortcutEnabled(ref _enableDdsBc7Shortcut, value, nameof(EnableDdsBc7Shortcut));
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the uncompressed DDS shortcut appears in Explorer.
+    /// </summary>
+    public bool EnableDdsUncompressedShortcut
+    {
+        get => _enableDdsUncompressedShortcut;
+        set => SetDdsShortcutEnabled(
+            ref _enableDdsUncompressedShortcut,
+            value,
+            nameof(EnableDdsUncompressedShortcut));
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the DXT1 DDS shortcut can be selected without exceeding Explorer's limit.
+    /// </summary>
+    public bool CanEnableDdsDxt1Shortcut =>
+        EnableDdsDxt1Shortcut || CanEnableAnotherDdsShortcut;
+
+    /// <summary>
+    /// Gets a value indicating whether the DXT3 DDS shortcut can be selected without exceeding Explorer's limit.
+    /// </summary>
+    public bool CanEnableDdsDxt3Shortcut =>
+        EnableDdsDxt3Shortcut || CanEnableAnotherDdsShortcut;
+
+    /// <summary>
+    /// Gets a value indicating whether the DXT5 DDS shortcut can be selected without exceeding Explorer's limit.
+    /// </summary>
+    public bool CanEnableDdsDxt5Shortcut =>
+        EnableDdsDxt5Shortcut || CanEnableAnotherDdsShortcut;
+
+    /// <summary>
+    /// Gets a value indicating whether the BC7 DDS shortcut can be selected without exceeding Explorer's limit.
+    /// </summary>
+    public bool CanEnableDdsBc7Shortcut =>
+        EnableDdsBc7Shortcut || CanEnableAnotherDdsShortcut;
+
+    /// <summary>
+    /// Gets a value indicating whether the uncompressed DDS shortcut can be selected without exceeding Explorer's limit.
+    /// </summary>
+    public bool CanEnableDdsUncompressedShortcut =>
+        EnableDdsUncompressedShortcut || CanEnableAnotherDdsShortcut;
+
+    /// <summary>
+    /// Gets the number of enabled entries in the main Pixoar Explorer menu.
+    /// </summary>
+    public int MainContextMenuEntryCount => GetMainContextMenuEntryCount(EnabledDdsShortcutCount);
+
+    /// <summary>
+    /// Gets the maximum number of static entries Explorer reliably displays in Pixoar's main menu.
+    /// </summary>
+    public int MainContextMenuEntryLimit => ExplorerStaticMenuEntryLimit;
+
+    /// <summary>
+    /// Gets the number of selected DDS compression shortcuts.
+    /// </summary>
+    public int EnabledDdsShortcutCount =>
+        (EnableDdsDxt1Shortcut ? 1 : 0) +
+        (EnableDdsDxt3Shortcut ? 1 : 0) +
+        (EnableDdsDxt5Shortcut ? 1 : 0) +
+        (EnableDdsBc7Shortcut ? 1 : 0) +
+        (EnableDdsUncompressedShortcut ? 1 : 0);
+
+    /// <summary>
+    /// Gets the number of DDS compression shortcuts that can be enabled for the current menu configuration.
+    /// </summary>
+    public int MaximumEnabledDdsShortcutCount => GetMaximumEnabledDdsShortcutCount();
+
+    /// <summary>
+    /// Gets a concise summary of the main Explorer menu budget.
+    /// </summary>
+    public string MainContextMenuBudgetText =>
+        $"{MainContextMenuEntryCount} / {MainContextMenuEntryLimit} Explorer menu entries in Pixoar.";
+
+    /// <summary>
+    /// Gets a value indicating whether the main Explorer menu remains within its static-entry limit.
+    /// </summary>
+    public bool IsMainContextMenuWithinBudget => MainContextMenuEntryCount <= MainContextMenuEntryLimit;
+
+    /// <summary>
+    /// Gets a user-facing warning shown only when the static Explorer menu limit is exceeded.
+    /// </summary>
+    public string MainContextMenuBudgetWarningText =>
+        $"Explorer can show at most {MainContextMenuEntryLimit} Pixoar actions. Disable a preset or DDS shortcut before applying changes.";
 
     /// <summary>
     /// Gets or sets the selected resize preset.
@@ -686,8 +872,161 @@ public sealed class SettingsViewModel : ViewModelBase
         return null;
     }
 
+    private void WatchPresetCollection(ObservableCollection<PresetListItem> presets)
+    {
+        presets.CollectionChanged += Presets_CollectionChanged;
+        foreach (var preset in presets)
+        {
+            preset.PropertyChanged += Preset_PropertyChanged;
+        }
+    }
+
+    private void Presets_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is not null)
+        {
+            foreach (PresetListItem preset in e.OldItems)
+            {
+                preset.PropertyChanged -= Preset_PropertyChanged;
+            }
+        }
+
+        if (e.NewItems is not null)
+        {
+            foreach (PresetListItem preset in e.NewItems)
+            {
+                preset.PropertyChanged += Preset_PropertyChanged;
+            }
+        }
+
+        NotifyMainContextMenuBudgetChanged();
+    }
+
+    private void Preset_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.PropertyName) ||
+            e.PropertyName is nameof(PresetListItem.IsEnabled) or nameof(PresetListItem.Name) or nameof(PresetListItem.Format))
+        {
+            NotifyMainContextMenuBudgetChanged();
+        }
+    }
+
+    private void SetDdsShortcutEnabled(ref bool field, bool value, string propertyName)
+    {
+        if (field == value)
+        {
+            return;
+        }
+
+        if (value && !CanEnableAnotherDdsShortcut)
+        {
+            StatusText = MainContextMenuBudgetWarningText;
+            OnPropertyChanged(propertyName);
+            return;
+        }
+
+        if (SetProperty(ref field, value, propertyName))
+        {
+            NotifyMainContextMenuBudgetChanged();
+        }
+    }
+
+    private bool CanEnableAnotherDdsShortcut =>
+        !AreDdsShortcutsVisible || EnabledDdsShortcutCount < MaximumEnabledDdsShortcutCount;
+
+    private bool AreDdsShortcutsVisible =>
+        EnableConvertPresets &&
+        ConvertPresets.Any(preset =>
+            preset.IsEnabled &&
+            IsDdsConvertPreset(preset));
+
+    private int GetMaximumEnabledDdsShortcutCount()
+    {
+        if (!AreDdsShortcutsVisible)
+        {
+            return DdsCompressionShortcutOptionCount;
+        }
+
+        for (var count = DdsCompressionShortcutOptionCount; count >= 0; count--)
+        {
+            if (GetMainContextMenuEntryCount(count) <= ExplorerStaticMenuEntryLimit)
+            {
+                return count;
+            }
+        }
+
+        return 0;
+    }
+
+    private int GetMainContextMenuEntryCount(int enabledDdsShortcutCount)
+    {
+        var entryCount = 0;
+
+        if (EnableResizePresets)
+        {
+            var enabledResizePresetCount = ResizePresets
+                .Where(preset => preset.IsEnabled)
+                .Select(preset => TryParseResizePercentage(preset.Name, out var percentage)
+                    ? percentage
+                    : 0)
+                .Where(percentage => percentage > 0)
+                .Count();
+            if (enabledResizePresetCount > 0)
+            {
+                entryCount += 1 + enabledResizePresetCount;
+            }
+        }
+
+        if (EnableConvertPresets)
+        {
+            var enabledNonDdsConvertPresetCount = ConvertPresets.Count(preset =>
+                preset.IsEnabled &&
+                !string.IsNullOrWhiteSpace(GetConvertPresetArgument(preset)) &&
+                !IsDdsConvertPreset(preset));
+            if (enabledNonDdsConvertPresetCount > 0)
+            {
+                entryCount += 1 + enabledNonDdsConvertPresetCount;
+            }
+
+            if (AreDdsShortcutsVisible && enabledDdsShortcutCount > 0)
+            {
+                // DDS is a nested menu inside Convert, so its parent consumes
+                // one Explorer static-menu entry in addition to each format.
+                entryCount += 1 + enabledDdsShortcutCount;
+            }
+        }
+
+        if (EnableUpscale)
+        {
+            entryCount += 3;
+        }
+
+        return entryCount;
+    }
+
+    private void NotifyMainContextMenuBudgetChanged()
+    {
+        OnPropertyChanged(nameof(MainContextMenuEntryCount));
+        OnPropertyChanged(nameof(EnabledDdsShortcutCount));
+        OnPropertyChanged(nameof(MaximumEnabledDdsShortcutCount));
+        OnPropertyChanged(nameof(MainContextMenuBudgetText));
+        OnPropertyChanged(nameof(IsMainContextMenuWithinBudget));
+        OnPropertyChanged(nameof(MainContextMenuBudgetWarningText));
+        OnPropertyChanged(nameof(CanEnableDdsDxt1Shortcut));
+        OnPropertyChanged(nameof(CanEnableDdsDxt3Shortcut));
+        OnPropertyChanged(nameof(CanEnableDdsDxt5Shortcut));
+        OnPropertyChanged(nameof(CanEnableDdsBc7Shortcut));
+        OnPropertyChanged(nameof(CanEnableDdsUncompressedShortcut));
+    }
+
     private async Task ApplyChangesAsync()
     {
+        if (!IsMainContextMenuWithinBudget)
+        {
+            StatusText = MainContextMenuBudgetWarningText;
+            return;
+        }
+
         StatusText = "Applying changes...";
 
         try
@@ -737,6 +1076,7 @@ public sealed class SettingsViewModel : ViewModelBase
         return _settingsService.UpdateAsync(settings =>
         {
             settings.General.CheckForUpdates = CheckForUpdates;
+            settings.General.DefaultUpscaleScale = DefaultUpscaleScale == "4x" ? 4 : 2;
 
             settings.Output.SaveBesideOriginal = SaveBesideOriginal;
             settings.Output.CustomOutputFolder = string.IsNullOrWhiteSpace(CustomOutputFolder)
@@ -745,6 +1085,7 @@ public sealed class SettingsViewModel : ViewModelBase
             settings.Output.ConflictBehavior = ParseOutputConflictBehavior(SelectedOutputConflictBehavior);
             settings.Output.SaveConvertedFilesInConvertedFolder = SaveConvertedFilesInConvertedFolder;
             settings.Output.SaveResizedFilesInResizeFolder = SaveResizedFilesInResizeFolder;
+            settings.Output.SaveUpscaledFilesInUpscaleFolder = SaveUpscaledFilesInUpscaleFolder;
 
             settings.Dds.Compression = ParseCompression(SelectedCompression);
             settings.Dds.GenerateMipmaps = GenerateMipmaps;
@@ -761,6 +1102,12 @@ public sealed class SettingsViewModel : ViewModelBase
             settings.ContextMenu.EnableConvertPresets = EnableConvertPresets;
             settings.ContextMenu.EnableImageInformation = EnableImageInformation;
             settings.ContextMenu.EnableOpenInPixoar = EnableOpenInPixoar;
+            settings.ContextMenu.EnableUpscale = EnableUpscale;
+            settings.ContextMenu.EnableDdsDxt1Shortcut = EnableDdsDxt1Shortcut;
+            settings.ContextMenu.EnableDdsDxt3Shortcut = EnableDdsDxt3Shortcut;
+            settings.ContextMenu.EnableDdsDxt5Shortcut = EnableDdsDxt5Shortcut;
+            settings.ContextMenu.EnableDdsBc7Shortcut = EnableDdsBc7Shortcut;
+            settings.ContextMenu.EnableDdsUncompressedShortcut = EnableDdsUncompressedShortcut;
 
             settings.ResizePresets = ResizePresets.Select(CreateResizePreset).ToList();
             settings.ConvertPresets = ConvertPresets.Select(CreateConvertPreset).ToList();
@@ -876,12 +1223,24 @@ public sealed class SettingsViewModel : ViewModelBase
     private static ConvertPreset CreateConvertPreset(PresetListItem item)
     {
         var name = string.IsNullOrWhiteSpace(item.Name) ? "PNG" : item.Name.Trim();
+        var format = GetConvertPresetArgument(item);
         return new ConvertPreset
         {
             Name = name.ToUpperInvariant(),
-            Format = name.TrimStart('.').ToLowerInvariant(),
+            Format = string.IsNullOrWhiteSpace(format) ? "png" : format,
             IsEnabled = item.IsEnabled
         };
+    }
+
+    private static bool IsDdsConvertPreset(PresetListItem preset) =>
+        GetConvertPresetArgument(preset).Equals("dds", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetConvertPresetArgument(PresetListItem preset)
+    {
+        return (string.IsNullOrWhiteSpace(preset.Format) ? preset.Name : preset.Format)
+            .Trim()
+            .TrimStart('.')
+            .ToLowerInvariant();
     }
 
     private static IReadOnlyList<PresetListItem> CreateConvertPresetItems(
@@ -927,6 +1286,7 @@ public sealed class SettingsViewModel : ViewModelBase
             .Select(format => new PresetListItem
             {
                 Name = format,
+                Format = format.ToLowerInvariant(),
                 IsEnabled = enabledByFormat[format]
             })
             .ToArray();

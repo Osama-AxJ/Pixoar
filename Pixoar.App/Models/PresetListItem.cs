@@ -8,6 +8,7 @@ namespace Pixoar.App.Models;
 public sealed class PresetListItem : ViewModelBase
 {
     private string _name = string.Empty;
+    private string _format = string.Empty;
     private bool _isEnabled = true;
 
     /// <summary>
@@ -17,6 +18,15 @@ public sealed class PresetListItem : ViewModelBase
     {
         get => _name;
         set => SetProperty(ref _name, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the canonical conversion format token when this item represents a conversion preset.
+    /// </summary>
+    public string Format
+    {
+        get => _format;
+        set => SetProperty(ref _format, value);
     }
 
     /// <summary>

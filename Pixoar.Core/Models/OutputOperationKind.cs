@@ -13,5 +13,8 @@ public enum OutputOperationKind
     /// <summary>
     /// Resize output naming.
     /// </summary>
-    Resize
+    Resize,
+
+    /// <summary>Local AI upscaling output naming.</summary>
+    Upscale
 }

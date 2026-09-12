@@ -25,6 +25,24 @@ internal static class UserFacingErrorMessage
 
     public static string ForImageOperation(Exception exception)
     {
+        if (exception is NotSupportedException upscaleNotSupported &&
+            upscaleNotSupported.Message.Contains("AI upscaling", StringComparison.OrdinalIgnoreCase))
+        {
+            return upscaleNotSupported.Message;
+        }
+
+        if (exception is FileNotFoundException upscaleMissing &&
+            upscaleMissing.Message.Contains("AI upscale", StringComparison.OrdinalIgnoreCase))
+        {
+            return upscaleMissing.Message;
+        }
+
+        if (exception is InvalidOperationException upscaleBackend &&
+            upscaleBackend.Message.StartsWith("AI upscaling requires", StringComparison.OrdinalIgnoreCase))
+        {
+            return "AI upscaling requires a Vulkan-compatible GPU and graphics driver.";
+        }
+
         if (IsTexconvMissing(exception))
         {
             return "DDS support requires bundled texconv.exe. Build Pixoar again or place texconv.exe beside the app.";

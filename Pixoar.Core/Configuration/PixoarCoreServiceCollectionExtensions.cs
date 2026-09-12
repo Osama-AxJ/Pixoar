@@ -47,6 +47,8 @@ public static class PixoarCoreServiceCollectionExtensions
         services.AddSingleton<IDdsService, DdsService>();
         services.AddSingleton<IImageConversionService, ImageConversionService>();
         services.AddSingleton<IImageResizeService, ImageResizeService>();
+        services.AddSingleton<IRealEsrganDependencyService, RealEsrganDependencyService>();
+        services.AddSingleton<IImageUpscaleService, RealEsrganNcnnUpscaleService>();
         services.AddSingleton<IImagePreviewService, ImagePreviewService>();
         services.AddSingleton<IImageInfoService, ImageInfoService>();
         services.AddSingleton<IContextMenuService, ContextMenuService>();
