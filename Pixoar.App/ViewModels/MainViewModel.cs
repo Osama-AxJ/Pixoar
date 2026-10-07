@@ -92,7 +92,6 @@ public sealed class MainViewModel : ViewModelBase
         ResizeMethods = ["By Dimensions", "By Percentage"];
         ResizeModes = ["Stretch", "Crop", "Fit"];
         UpscaleScales = ["2x", "4x"];
-        _selectedUpscaleScale = settingsService.Current.General.DefaultUpscaleScale == 4 ? "4x" : "2x";
 
         AddImagesCommand = new AsyncRelayCommand(_ => AddImagesAsync(), _ => !IsBusy);
         AddFolderCommand = new AsyncRelayCommand(_ => AddFolderAsync(), _ => !IsBusy);
@@ -869,7 +868,6 @@ public sealed class MainViewModel : ViewModelBase
     private async Task UpscaleSelectedAsync()
     {
         var scale = string.Equals(SelectedUpscaleScale, "4x", StringComparison.OrdinalIgnoreCase) ? 4 : 2;
-        await _settingsService.UpdateAsync(settings => settings.General.DefaultUpscaleScale = scale);
         var selectedImages = SelectedImages.ToArray();
         var requests = selectedImages.Select(image => new UpscaleRequest
         {
@@ -1781,6 +1779,6 @@ public sealed class MainViewModel : ViewModelBase
 
     private static string GetVersionText()
     {
-        return Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.2.0";
+        return Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
     }
 }

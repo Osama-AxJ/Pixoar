@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using Pixoar.App.Commands;
 using Pixoar.App.Models;
 using Pixoar.App.Services;
@@ -37,7 +38,6 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _saveConvertedFilesInConvertedFolder;
     private bool _saveResizedFilesInResizeFolder;
     private bool _saveUpscaledFilesInUpscaleFolder;
-    private string _defaultUpscaleScale = "2x";
     private string _selectedCompression = "DXT5";
     private bool _generateMipmaps = true;
     private string _selectedMipmapMode = "Full chain";
@@ -52,7 +52,8 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _enableConvertPresets = true;
     private bool _enableImageInformation = true;
     private bool _enableOpenInPixoar = true;
-    private bool _enableUpscale = true;
+    private bool _enableUpscale2x = true;
+    private bool _enableUpscale4x = true;
     private bool _enableDdsDxt1Shortcut = true;
     private bool _enableDdsDxt3Shortcut;
     private bool _enableDdsDxt5Shortcut = true;
@@ -93,7 +94,6 @@ public sealed class SettingsViewModel : ViewModelBase
         CompressionOptions = ["DXT1", "DXT3", "DXT5", "BC7", "Uncompressed"];
         MipmapModeOptions = ["Full chain", "Custom"];
         MipmapFilterOptions = ["Fant (Default)", "Linear", "Cubic", "Triangle"];
-        UpscaleScaleOptions = ["2x", "4x"];
 
         var settings = settingsService.Current;
         _checkForUpdates = settings.General.CheckForUpdates;
@@ -103,7 +103,6 @@ public sealed class SettingsViewModel : ViewModelBase
         _saveConvertedFilesInConvertedFolder = settings.Output.SaveConvertedFilesInConvertedFolder;
         _saveResizedFilesInResizeFolder = settings.Output.SaveResizedFilesInResizeFolder;
         _saveUpscaledFilesInUpscaleFolder = settings.Output.SaveUpscaledFilesInUpscaleFolder;
-        _defaultUpscaleScale = settings.General.DefaultUpscaleScale == 4 ? "4x" : "2x";
         _selectedCompression = FormatCompression(settings.Dds.Compression.ToString());
         _generateMipmaps = settings.Dds.GenerateMipmaps;
         _selectedMipmapMode = FormatMipmapMode(settings.Dds.MipmapMode);
@@ -117,7 +116,8 @@ public sealed class SettingsViewModel : ViewModelBase
         _enableConvertPresets = settings.ContextMenu.EnableConvertPresets;
         _enableImageInformation = settings.ContextMenu.EnableImageInformation;
         _enableOpenInPixoar = settings.ContextMenu.EnableOpenInPixoar;
-        _enableUpscale = settings.ContextMenu.EnableUpscale;
+        _enableUpscale2x = settings.ContextMenu.EnableUpscale2x;
+        _enableUpscale4x = settings.ContextMenu.EnableUpscale4x;
         _enableDdsDxt1Shortcut = settings.ContextMenu.EnableDdsDxt1Shortcut;
         _enableDdsDxt3Shortcut = settings.ContextMenu.EnableDdsDxt3Shortcut;
         _enableDdsDxt5Shortcut = settings.ContextMenu.EnableDdsDxt5Shortcut;
@@ -176,9 +176,6 @@ public sealed class SettingsViewModel : ViewModelBase
     /// Gets the supported DDS mipmap filters.
     /// </summary>
     public IReadOnlyList<string> MipmapFilterOptions { get; }
-
-    /// <summary>Gets supported default local AI upscale scales.</summary>
-    public IReadOnlyList<string> UpscaleScaleOptions { get; }
 
     /// <summary>
     /// Gets editable resize presets.
@@ -263,7 +260,7 @@ public sealed class SettingsViewModel : ViewModelBase
     /// <summary>
     /// Gets the application version text.
     /// </summary>
-    public string VersionText => "0.2.0";
+    public string VersionText => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
 
     /// <summary>
     /// Gets the license text.
@@ -364,13 +361,6 @@ public sealed class SettingsViewModel : ViewModelBase
     {
         get => _saveUpscaledFilesInUpscaleFolder;
         set => SetProperty(ref _saveUpscaledFilesInUpscaleFolder, value);
-    }
-
-    /// <summary>Gets or sets the default local AI upscale scale.</summary>
-    public string DefaultUpscaleScale
-    {
-        get => _defaultUpscaleScale;
-        set => SetProperty(ref _defaultUpscaleScale, value);
     }
 
     /// <summary>
@@ -546,13 +536,26 @@ public sealed class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _enableOpenInPixoar, value);
     }
 
-    /// <summary>Gets or sets whether Upscale appears in Explorer quick actions.</summary>
-    public bool EnableUpscale
+    /// <summary>Gets or sets whether 2x Upscale appears in Explorer quick actions.</summary>
+    public bool EnableUpscale2x
     {
-        get => _enableUpscale;
+        get => _enableUpscale2x;
         set
         {
-            if (SetProperty(ref _enableUpscale, value))
+            if (SetProperty(ref _enableUpscale2x, value))
+            {
+                NotifyMainContextMenuBudgetChanged();
+            }
+        }
+    }
+
+    /// <summary>Gets or sets whether 4x Upscale appears in Explorer quick actions.</summary>
+    public bool EnableUpscale4x
+    {
+        get => _enableUpscale4x;
+        set
+        {
+            if (SetProperty(ref _enableUpscale4x, value))
             {
                 NotifyMainContextMenuBudgetChanged();
             }
@@ -996,9 +999,9 @@ public sealed class SettingsViewModel : ViewModelBase
             }
         }
 
-        if (EnableUpscale)
+        if (EnableUpscale2x || EnableUpscale4x)
         {
-            entryCount += 3;
+            entryCount += 1 + (EnableUpscale2x ? 1 : 0) + (EnableUpscale4x ? 1 : 0);
         }
 
         return entryCount;
@@ -1076,7 +1079,6 @@ public sealed class SettingsViewModel : ViewModelBase
         return _settingsService.UpdateAsync(settings =>
         {
             settings.General.CheckForUpdates = CheckForUpdates;
-            settings.General.DefaultUpscaleScale = DefaultUpscaleScale == "4x" ? 4 : 2;
 
             settings.Output.SaveBesideOriginal = SaveBesideOriginal;
             settings.Output.CustomOutputFolder = string.IsNullOrWhiteSpace(CustomOutputFolder)
@@ -1102,7 +1104,8 @@ public sealed class SettingsViewModel : ViewModelBase
             settings.ContextMenu.EnableConvertPresets = EnableConvertPresets;
             settings.ContextMenu.EnableImageInformation = EnableImageInformation;
             settings.ContextMenu.EnableOpenInPixoar = EnableOpenInPixoar;
-            settings.ContextMenu.EnableUpscale = EnableUpscale;
+            settings.ContextMenu.EnableUpscale2x = EnableUpscale2x;
+            settings.ContextMenu.EnableUpscale4x = EnableUpscale4x;
             settings.ContextMenu.EnableDdsDxt1Shortcut = EnableDdsDxt1Shortcut;
             settings.ContextMenu.EnableDdsDxt3Shortcut = EnableDdsDxt3Shortcut;
             settings.ContextMenu.EnableDdsDxt5Shortcut = EnableDdsDxt5Shortcut;

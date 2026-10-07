@@ -53,6 +53,23 @@ internal sealed class ContextMenuService(
 
     public async Task<ContextMenuInstallationStatus> ApplyAsync(CancellationToken cancellationToken = default)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            using var associations = Registry.CurrentUser.OpenSubKey(SystemFileAssociationsPath, writable: true);
+            IReadOnlyList<string> removedKeys = associations is null
+                ? []
+                : RemoveLegacyBackgroundRemovalEntries(associations, cancellationToken);
+            foreach (var key in removedKeys)
+            {
+                await logger.LogInformationAsync($"Legacy Pixoar action removed: {key}", cancellationToken).ConfigureAwait(false);
+            }
+
+            if (removedKeys.Count > 0)
+            {
+                NotifyShellAssociationChanged();
+            }
+        }
+
         var status = await GetInstallationStatusAsync(cancellationToken).ConfigureAwait(false);
 
         if (settingsService.Current.ContextMenu.EnableContextMenu)
@@ -68,6 +85,57 @@ internal sealed class ContextMenuService(
         }
 
         return await GetInstallationStatusAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // Only the seven known legacy action branches are migrated. Current actions
+    // and entries whose command does not identify the removed Pixoar action stay intact.
+    [SupportedOSPlatform("windows")]
+    private static IReadOnlyList<string> RemoveLegacyBackgroundRemovalEntries(
+        RegistryKey associations, CancellationToken cancellationToken)
+    {
+        const string legacyAction = "40_RemoveBackground";
+        var removedKeys = new List<string>();
+        foreach (var extension in SupportedExtensions.Where(extension => extension != ".dds"))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var shell = associations.OpenSubKey($@"{extension}\shell\Pixoar\shell", writable: true);
+            if (shell is null)
+            {
+                continue;
+            }
+
+            using (var legacy = shell.OpenSubKey(legacyAction))
+            {
+                if (legacy is null ||
+                    !string.Equals(legacy.GetValue("MUIVerb") as string, "Remove Background", StringComparison.Ordinal) ||
+                    legacy.GetSubKeyNames().Length != 1 ||
+                    !legacy.GetSubKeyNames()[0].Equals("command", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                using var commandKey = legacy.OpenSubKey("command");
+                if (commandKey is null || commandKey.SubKeyCount != 0)
+                {
+                    continue;
+                }
+
+                var command = ParseRegistryCommand(commandKey.GetValue(null) as string ?? string.Empty);
+                if (!command.ExecutableWasQuoted ||
+                    !Path.GetFileName(command.ExecutablePath).Equals(AppExecutableName, StringComparison.OrdinalIgnoreCase) ||
+                    !command.ArgumentsBeforeFile.Equals("--explorer-batch remove-bg --local true", StringComparison.OrdinalIgnoreCase) ||
+                    command.SelectedFilePlaceholder != "\"%1\"")
+                {
+                    continue;
+                }
+
+                removedKeys.Add(legacy.Name);
+            }
+
+            shell.DeleteSubKeyTree(legacyAction, throwOnMissingSubKey: false);
+        }
+
+        return removedKeys;
     }
 
     private async Task InstallAsync(CancellationToken cancellationToken = default)
@@ -559,13 +627,21 @@ internal sealed class ContextMenuService(
             }
         }
 
-        if (settings.ContextMenu.EnableUpscale && !extension.Equals(".dds", StringComparison.OrdinalIgnoreCase))
+        if ((settings.ContextMenu.EnableUpscale2x || settings.ContextMenu.EnableUpscale4x) &&
+            !extension.Equals(".dds", StringComparison.OrdinalIgnoreCase))
         {
             var upscaleKey = CreateExpectedSubmenu("Upscale", executablePaths.ContextMenuIconPath);
             menuShellKey.SubKeys.Add("50_Upscale", upscaleKey);
             var upscaleShellKey = upscaleKey.AddSubKey("shell");
-            AddExpectedCommand(upscaleShellKey, "01_2x", "2x", executablePaths.AppPath, "--explorer-batch upscale --scale 2", executablePaths.ContextMenuIconPath);
-            AddExpectedCommand(upscaleShellKey, "02_4x", "4x", executablePaths.AppPath, "--explorer-batch upscale --scale 4", executablePaths.ContextMenuIconPath);
+            if (settings.ContextMenu.EnableUpscale2x)
+            {
+                AddExpectedCommand(upscaleShellKey, "01_2x", "2x", executablePaths.AppPath, "--explorer-batch upscale --scale 2", executablePaths.ContextMenuIconPath);
+            }
+
+            if (settings.ContextMenu.EnableUpscale4x)
+            {
+                AddExpectedCommand(upscaleShellKey, "02_4x", "4x", executablePaths.AppPath, "--explorer-batch upscale --scale 4", executablePaths.ContextMenuIconPath);
+            }
         }
 
         return menuKey;

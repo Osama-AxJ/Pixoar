@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using ImageMagick;
@@ -29,13 +30,26 @@ internal static class Program
 
         try
         {
-            if (args.Contains("--output-organization", StringComparer.OrdinalIgnoreCase))
+            if (args.Contains("--upscale-settings", StringComparer.OrdinalIgnoreCase))
+            {
+                await UpscaleSettingsRegression.VerifySettingsAsync(runRoot);
+                await UpscaleSettingsRegression.VerifyRegistryAsync(runRoot);
+                Console.WriteLine("PASS: independent Upscale settings and Explorer Apply workflows verified.");
+            }
+            else if (args.Contains("--desktop", StringComparer.OrdinalIgnoreCase))
+            {
+                await DesktopWorkflowRegression.RunAsync(runRoot);
+                Console.WriteLine("PASS: desktop command workflows and processed integration verified.");
+            }
+            else if (args.Contains("--output-organization", StringComparer.OrdinalIgnoreCase))
             {
                 await RunOutputOrganizationAsync(runRoot);
                 Console.WriteLine("PASS: output organization and collision behavior verified.");
             }
             else
             {
+                LegacyContextMenuRegression.Run();
+                await UpscaleSettingsRegression.VerifySettingsAsync(runRoot);
                 await RunAsync(runRoot);
                 Console.WriteLine("PASS: resize smoke matrix and regressions completed.");
             }

@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  A lightweight Windows application for converting, resizing, and inspecting images, with built-in DDS support and Windows Explorer integration.
+  A lightweight Windows application for converting, resizing, upscaling, and inspecting images, with built-in DDS support and Windows Explorer integration.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.2.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-v1.0.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows-0078D6" alt="Windows">
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4" alt=".NET 8">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0">
@@ -33,10 +33,12 @@
 - Batch conversion and resizing
 - Percentage and dimension based resizing
 - Local AI image upscaling powered by Real-ESRGAN
-- DDS conversion with selectable compression
+- DDS conversion with selectable compression and configurable mipmap generation
+- DDS mipmap inspection and expanded preview
 - Windows Explorer context menu integration
 - Image information viewer
 - Drag and drop support
+- Image list sorting
 
 ---
 
@@ -59,6 +61,8 @@ Download the latest release from the **[Releases](https://github.com/Osama-AxJ/P
 
 The default release is framework dependent and requires the **.NET 8 Desktop Runtime (x64)**.
 
+Local AI upscaling requires a **Vulkan-compatible graphics card and driver**.
+
 No installation is required.
 
 Extract the .zip and run:
@@ -67,7 +71,7 @@ Extract the .zip and run:
 Pixoar.exe
 ```
 
-DDS support works out of the box using the bundled `tools/texconv/texconv.exe`, relative to the application directory.
+DDS support works out of the box using the bundled `texconv` tool.
 
 ---
 
@@ -83,7 +87,8 @@ Supported compression formats:
 
 Available options:
 
-- Generate mipmaps
+- Generate a full mipmap chain or stop at a custom size
+- Select mipmap filtering
 - Preserve alpha
 
 ---

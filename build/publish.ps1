@@ -19,7 +19,7 @@ $propsPath = Join-Path $repositoryRoot "Directory.Build.props"
 [xml]$props = Get-Content -LiteralPath $propsPath
 $version = $props.Project.PropertyGroup.Version
 if ([string]::IsNullOrWhiteSpace($version)) {
-    $version = "0.2.0"
+    throw "Directory.Build.props must define the release Version."
 }
 
 $resolvedArtifacts = [System.IO.Path]::GetFullPath($artifactsDirectory)
@@ -75,6 +75,7 @@ $requiredFiles = @(
     "licenses\Real-ESRGAN-ncnn-vulkan-MIT.txt",
     "licenses\NCNN-BSD-3-Clause.txt",
     "licenses\Real-ESRGAN-model-BSD-3-Clause.txt",
+    "licenses\Microsoft-OpenMP-Runtime-Notice.txt",
     "Resources\Assets\Branding\pixoar.ico"
 )
 

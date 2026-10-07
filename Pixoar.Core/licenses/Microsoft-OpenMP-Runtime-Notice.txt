@@ -1,0 +1,18 @@
+Microsoft Visual C++ OpenMP Runtime (VCOMP140.DLL)
+Publisher: Microsoft Corporation
+
+tools/realesrgan/vcomp140.dll is an unmodified Microsoft x64 redistributable
+runtime, version 14.51.36247.0, extracted from the official Microsoft Visual
+C++ v14 Redistributable (x64) 14.51.36247.0 package:
+https://aka.ms/vc14/vc_redist.x64.exe
+SHA-256: 95D4CE4A6802D1E18B5E0E1722CC30EA72CA7E033F83828F05C0B7B993FE7CBF
+
+This Microsoft component is governed by the applicable Microsoft Visual Studio
+/ Visual C++ Redistributable license terms, not by Pixoar's GPL-3.0-only license
+or the MIT/BSD licenses of Real-ESRGAN, ncnn, or the model assets. Redistribution
+is subject to Microsoft's terms for licensed Visual Studio users.
+
+Official redistribution and license references:
+https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/

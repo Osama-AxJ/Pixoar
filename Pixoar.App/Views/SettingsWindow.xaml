@@ -171,10 +171,6 @@
                                           IsChecked="{Binding SaveResizedFilesInResizeFolder}" />
                                 <CheckBox Content="Save upscaled images in an &quot;Upscale&quot; folder"
                                           IsChecked="{Binding SaveUpscaledFilesInUpscaleFolder}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                    <TextBlock Text="Default Upscale Scale" Style="{StaticResource LabelTextBlockStyle}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                    <ComboBox ItemsSource="{Binding UpscaleScaleOptions}" SelectedItem="{Binding DefaultUpscaleScale}" Width="100" />
-                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -318,8 +314,11 @@
                             <CheckBox Content="Open in Pixoar"
                                       IsChecked="{Binding EnableOpenInPixoar}"
                                       Margin="0,0,16,8" />
-                            <CheckBox Content="Upscale (2x and 4x)"
-                                      IsChecked="{Binding EnableUpscale}"
+                            <CheckBox Content="Upscale 2x"
+                                      IsChecked="{Binding EnableUpscale2x}"
+                                      Margin="0,0,16,8" />
+                            <CheckBox Content="Upscale 4x"
+                                      IsChecked="{Binding EnableUpscale4x}"
                                       Margin="0,0,16,8" />
                         </WrapPanel>
                         <TextBlock Text="{Binding MainContextMenuBudgetText}">

@@ -29,6 +29,9 @@
     <Content Include="licenses\Real-ESRGAN-model-BSD-3-Clause.txt"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="licenses\Microsoft-OpenMP-Runtime-Notice.txt"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup Condition="Exists('$(PkgMagick_NET-Q8-AnyCPU)\Notice.txt')">

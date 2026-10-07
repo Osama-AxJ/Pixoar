@@ -41,6 +41,7 @@ internal sealed class JsonSettingsService(
             {
                 PixoarSettings? settings;
                 var migrateLegacyDdsMipmapFilter = false;
+                var migrateLegacyUpscaleSettings = false;
 
                 await using (var stream = await OpenSettingsReadStreamAsync(cancellationToken).ConfigureAwait(false))
                 {
@@ -48,12 +49,13 @@ internal sealed class JsonSettingsService(
                     var settingsJson = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
                     settings = JsonSerializer.Deserialize<PixoarSettings>(settingsJson, SerializerOptions);
                     migrateLegacyDdsMipmapFilter = HasLegacyDdsMipmapFilter(settingsJson);
+                    migrateLegacyUpscaleSettings = MigrateLegacyUpscaleSettings(settingsJson, settings);
                 }
 
                 var beforeNormalization = JsonSerializer.Serialize(settings, SerializerOptions);
                 _current = settingsFactory.Normalize(settings);
                 var afterNormalization = JsonSerializer.Serialize(_current, SerializerOptions);
-                if (migrateLegacyDdsMipmapFilter ||
+                if (migrateLegacyDdsMipmapFilter || migrateLegacyUpscaleSettings ||
                     !string.Equals(beforeNormalization, afterNormalization, StringComparison.Ordinal))
                 {
                     await SaveUnlockedAsync(cancellationToken).ConfigureAwait(false);
@@ -217,6 +219,34 @@ internal sealed class JsonSettingsService(
         var brokenFilePath = Path.Combine(pathProvider.AppDataDirectory, "settings.broken.json");
         File.Move(pathProvider.SettingsFilePath, brokenFilePath, overwrite: true);
         return Task.CompletedTask;
+    }
+
+    private static bool MigrateLegacyUpscaleSettings(string settingsJson, PixoarSettings? settings)
+    {
+        using var document = JsonDocument.Parse(settingsJson);
+        var root = document.RootElement;
+        var hasObsoleteDefault = TryGetPropertyIgnoreCase(root, "general", out var general) &&
+            TryGetPropertyIgnoreCase(general, "defaultUpscaleScale", out _);
+        JsonElement legacyOption = default;
+        var hasLegacyExplorerOption = TryGetPropertyIgnoreCase(root, "contextMenu", out var contextMenu) &&
+            TryGetPropertyIgnoreCase(contextMenu, "enableUpscale", out legacyOption);
+
+        if (hasLegacyExplorerOption && settings?.ContextMenu is not null &&
+            legacyOption.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            // Explicit new preferences take precedence if both old and new fields exist.
+            if (!TryGetPropertyIgnoreCase(contextMenu, "enableUpscale2x", out _))
+            {
+                settings.ContextMenu.EnableUpscale2x = legacyOption.GetBoolean();
+            }
+
+            if (!TryGetPropertyIgnoreCase(contextMenu, "enableUpscale4x", out _))
+            {
+                settings.ContextMenu.EnableUpscale4x = legacyOption.GetBoolean();
+            }
+        }
+
+        return hasObsoleteDefault || hasLegacyExplorerOption;
     }
 
     private static bool HasLegacyDdsMipmapFilter(string settingsJson)

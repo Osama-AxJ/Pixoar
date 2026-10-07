@@ -30,8 +30,11 @@ public sealed class ContextMenuSettings
     /// </summary>
     public bool EnableOpenInPixoar { get; set; } = true;
 
-    /// <summary>Gets or sets whether the Upscale submenu appears in the context menu.</summary>
-    public bool EnableUpscale { get; set; } = true;
+    /// <summary>Gets or sets whether the 2x Upscale action appears in the context menu.</summary>
+    public bool EnableUpscale2x { get; set; } = true;
+
+    /// <summary>Gets or sets whether the 4x Upscale action appears in the context menu.</summary>
+    public bool EnableUpscale4x { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether the DXT1 DDS compression shortcut appears in the context menu.
