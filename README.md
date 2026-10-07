@@ -67,7 +67,7 @@ Extract the .zip and run:
 Pixoar.exe
 ```
 
-DDS support works out of the box using the bundled `texconv.exe`.
+DDS support works out of the box using the bundled `tools/texconv/texconv.exe`, relative to the application directory.
 
 ---
 

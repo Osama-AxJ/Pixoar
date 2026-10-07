@@ -36,6 +36,9 @@ New-Item -ItemType Directory -Path $resolvedInstall | Out-Null
 New-Item -ItemType Directory -Path $distDirectory -Force | Out-Null
 
 dotnet restore (Join-Path $repositoryRoot "Pixoar.sln")
+if ($LASTEXITCODE -ne 0) {
+    throw "Restore failed with exit code $LASTEXITCODE."
+}
 
 $publishArguments = @(
     "publish",
@@ -48,6 +51,9 @@ $publishArguments = @(
 )
 
 dotnet @publishArguments
+if ($LASTEXITCODE -ne 0) {
+    throw "Publish failed with exit code $LASTEXITCODE."
+}
 
 Get-ChildItem -LiteralPath $resolvedInstall -Recurse -File |
     Where-Object { $_.Extension -in ".pdb", ".xml" } |
@@ -56,7 +62,7 @@ Get-ChildItem -LiteralPath $resolvedInstall -Recurse -File |
 $requiredFiles = @(
     "Pixoar.exe",
     "Pixoar.Cli.exe",
-    "texconv.exe",
+    "tools\texconv\texconv.exe",
     "tools\realesrgan\realesrgan-ncnn-vulkan.exe",
     "tools\realesrgan\vcomp140.dll",
     "tools\realesrgan\models\realesrgan-x4plus.param",
@@ -79,6 +85,11 @@ foreach ($fileName in $requiredFiles) {
     }
 }
 
+$texconvFiles = @(Get-ChildItem -LiteralPath $resolvedInstall -Recurse -File -Filter "texconv.exe")
+if ($texconvFiles.Count -ne 1) {
+    throw "Publish output must contain exactly one bundled texconv.exe in tools\texconv. Found $($texconvFiles.Count)."
+}
+
 if (-not $NoZip) {
     $zipPath = Join-Path $distDirectory "Pixoar-$version-$RuntimeIdentifier.zip"
     if (Test-Path -LiteralPath $zipPath) {
@@ -86,6 +97,17 @@ if (-not $NoZip) {
     }
 
     Compress-Archive -Path (Join-Path $resolvedInstall "*") -DestinationPath $zipPath -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        $texconvEntries = @($archive.Entries | Where-Object { $_.Name -ieq "texconv.exe" })
+        if ($texconvEntries.Count -ne 1 -or $texconvEntries[0].FullName.Replace('\', '/') -cne "tools/texconv/texconv.exe") {
+            throw "Release archive must contain exactly one bundled tools/texconv/texconv.exe."
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
     Write-Host "Created release archive: $zipPath"
 }
 

@@ -8,7 +8,7 @@ internal static class UserFacingErrorMessage
     {
         if (IsTexconvMissing(exception))
         {
-            return "DDS support requires bundled texconv.exe. Build Pixoar again or place texconv.exe beside the app.";
+            return "DDS support requires bundled tools/texconv/texconv.exe. Build Pixoar again or reinstall it to restore the bundled tool.";
         }
 
         return exception switch
@@ -45,7 +45,7 @@ internal static class UserFacingErrorMessage
 
         if (IsTexconvMissing(exception))
         {
-            return "DDS support requires bundled texconv.exe. Build Pixoar again or place texconv.exe beside the app.";
+            return "DDS support requires bundled tools/texconv/texconv.exe. Build Pixoar again or reinstall it to restore the bundled tool.";
         }
 
         if (exception is InvalidOperationException invalidOperationException &&

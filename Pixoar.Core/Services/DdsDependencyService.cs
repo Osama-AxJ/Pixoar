@@ -7,11 +7,11 @@ internal sealed class DdsDependencyService : IDdsDependencyService
     private const string TexconvFileName = "texconv.exe";
 
     public string MissingTexconvMessage =>
-        "DDS support requires texconv.exe. Build Pixoar with the bundled tool or place texconv.exe beside the app.";
+        "DDS support requires bundled tools/texconv/texconv.exe. Build Pixoar again or reinstall it to restore the bundled tool.";
 
     public string? ResolveTexconvPath()
     {
-        var candidate = Path.Combine(AppContext.BaseDirectory, TexconvFileName);
+        var candidate = Path.Combine(AppContext.BaseDirectory, "tools", "texconv", TexconvFileName);
         return File.Exists(candidate) ? Path.GetFullPath(candidate) : null;
     }
 

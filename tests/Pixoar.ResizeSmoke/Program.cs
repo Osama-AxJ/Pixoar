@@ -87,6 +87,9 @@ internal static class Program
 
         var texconvPath = dependencyService.ResolveTexconvPath()
             ?? throw new InvalidOperationException(dependencyService.MissingTexconvMessage);
+        Assert(
+            string.Equals(texconvPath, Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "tools", "texconv", "texconv.exe")), StringComparison.OrdinalIgnoreCase),
+            $"texconv was not resolved from the canonical application-relative location: {texconvPath}");
         var bundledTexconvPath = Path.Combine(FindRepositoryRoot(), "tools", "texconv", "texconv.exe");
         Assert(
             FileSnapshot.Hash(texconvPath) == FileSnapshot.Hash(bundledTexconvPath),

@@ -11,7 +11,7 @@ public interface IDdsDependencyService
     string MissingTexconvMessage { get; }
 
     /// <summary>
-    /// Resolves texconv.exe from the app folder, development tools folder, or PATH.
+    /// Resolves only the bundled tools/texconv/texconv.exe relative to the application directory.
     /// </summary>
     /// <returns>The full path to texconv.exe, or null when it cannot be found.</returns>
     string? ResolveTexconvPath();

@@ -20,7 +20,7 @@
 
   <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)tools\texconv\texconv.exe')">
     <Content Include="$(MSBuildThisFileDirectory)tools\texconv\texconv.exe"
-             Link="texconv.exe"
+             Link="tools\texconv\texconv.exe"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

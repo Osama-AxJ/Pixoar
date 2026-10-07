@@ -65,6 +65,7 @@ static async Task RunAsync(string runRoot)
     var resize = provider.GetRequiredService<IImageResizeService>();
     var dds = provider.GetRequiredService<IDdsService>();
     var ddsDependency = provider.GetRequiredService<IDdsDependencyService>();
+    VerifyBundledTexconvDiscovery(runRoot, ddsDependency);
     var preview = provider.GetRequiredService<IImagePreviewService>();
     var fixturesRoot = Path.Combine(runRoot, "Fixtures");
     Directory.CreateDirectory(fixturesRoot);
@@ -93,6 +94,47 @@ static async Task RunAsync(string runRoot)
         ddsDependency.ResolveTexconvPath()
             ?? throw new InvalidOperationException(ddsDependency.MissingTexconvMessage));
     await VerifyDefaultQualityBiasAsync(runRoot, settings, conversion);
+}
+
+static void VerifyBundledTexconvDiscovery(string runRoot, IDdsDependencyService dependency)
+{
+    var bundledPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "tools", "texconv", "texconv.exe"));
+    Assert(string.Equals(dependency.ResolveTexconvPath(), bundledPath, StringComparison.OrdinalIgnoreCase),
+        "texconv must resolve from tools/texconv relative to the application directory.");
+
+    var legacyPath = Path.Combine(AppContext.BaseDirectory, "texconv.exe");
+    var createdLegacyFile = !File.Exists(legacyPath);
+    var hiddenPath = bundledPath + "." + Guid.NewGuid().ToString("N") + ".bak";
+    var decoyDirectory = Path.Combine(runRoot, "Developer PATH with spaces");
+    Directory.CreateDirectory(decoyDirectory);
+    File.WriteAllText(Path.Combine(decoyDirectory, "texconv.exe"), "Not the bundled texconv");
+    var originalPath = Environment.GetEnvironmentVariable("PATH");
+    var originalDirectory = Environment.CurrentDirectory;
+
+    try
+    {
+        if (createdLegacyFile) File.WriteAllText(legacyPath, "Not the bundled texconv");
+        Environment.SetEnvironmentVariable("PATH", decoyDirectory + Path.PathSeparator + originalPath);
+        Environment.CurrentDirectory = decoyDirectory;
+        Assert(string.Equals(dependency.ResolveTexconvPath(), bundledPath, StringComparison.OrdinalIgnoreCase),
+            "Legacy app-root, working-directory, or PATH copies must not override the bundled texconv.");
+
+        File.Move(bundledPath, hiddenPath);
+        Assert(dependency.ResolveTexconvPath() is null && !dependency.IsTexconvAvailable(),
+            "A missing bundled texconv must not fall back to the app root, working directory, repository, or PATH.");
+        Assert(dependency.MissingTexconvMessage.Contains("tools/texconv/texconv.exe", StringComparison.Ordinal),
+            "The missing-dependency message must identify the bundled location.");
+    }
+    finally
+    {
+        if (File.Exists(hiddenPath)) File.Move(hiddenPath, bundledPath);
+        if (createdLegacyFile && File.Exists(legacyPath)) File.Delete(legacyPath);
+        Environment.SetEnvironmentVariable("PATH", originalPath);
+        Environment.CurrentDirectory = originalDirectory;
+    }
+
+    Assert(dependency.IsTexconvAvailable(), "Bundled texconv discovery must recover after the tool is restored.");
+    Console.WriteLine($"PASS bundled texconv discovery: {bundledPath}; no app-root, working-directory, repository, or PATH fallback.");
 }
 
 static async Task VerifyProfileAndTransferFixturesAsync(
